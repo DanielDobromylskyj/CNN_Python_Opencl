@@ -25,6 +25,7 @@ __kernel void forward(__global float* inputs, __global float* outputs,
 
 __kernel void reduce_outputs(__global float* unreduced_outputs,
                              __global float* reduced_outputs,
+                             __global float* unactivated_outputs,
                              __global float* biases,
                              int input_size, int output_size,
                              int activation_type) {
@@ -39,6 +40,7 @@ __kernel void reduce_outputs(__global float* unreduced_outputs,
     }
 
     local_sum += biases[output_index];
+    unactivated_outputs[output_index] = local_sum;
 
     float activated = 0.0;
     switch (activation_type) {

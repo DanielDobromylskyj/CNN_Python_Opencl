@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import List, Any
 
 import pyopencl as cl
@@ -32,18 +34,19 @@ def relu_weight_init(size, fan_in, dtype=np.float32):
 
 
 class Layer:
-    def forward(self, inputs: NetworkBuffer):
+    def forward(self, inputs: NetworkBuffer, save_layer_data=False):
         """ Perform a forward pass over the layer """
-        pass
+        raise NotImplementedError
 
-    def backward(self, inputs: NetworkBuffer, outputs: NetworkBuffer, output_error_gradients: NetworkBuffer,
+    def backward(self, inputs: NetworkBuffer, outputs_activated: NetworkBuffer, outputs_unactivated: NetworkBuffer,
+                 output_error_gradients: Gradients,
                  learning_rate: float) -> tuple[Gradients, Gradients, Gradients]:
         """ Calculate the gradients and errors for weights, biases and the 'next' layer """
-        pass
+        raise NotImplementedError
 
     def apply_gradients(self, weight_gradients: Gradients, bias_gradients: Gradients) -> None:
         """ Applies the gradients we have calculated """
-        pass
+        raise NotImplementedError
 
     def get_total_nodes_in(self):
         raise NotImplementedError("Layer does not have a implemented 'get_total_nodes_in' method")
@@ -129,10 +132,14 @@ class ConvolutedLayer(Layer):
 
         return output
 
-    def forward(self, inputs: NetworkBuffer) -> tuple[Any]:
-        return tuple(
+    def forward(self, inputs: NetworkBuffer, save_layer_data=False) -> tuple[Any] | tuple[tuple[Any], None]:
+        data = tuple(
             self._forward(filter_index, inputs) for filter_index in range(self.__filter_count)
         )
+
+        if save_layer_data:
+            return data, None
+        return data
 
 
 class FullyConnectedLayer(Layer):
@@ -165,19 +172,64 @@ class FullyConnectedLayer(Layer):
     def get_total_nodes_out(self) -> int:
         return self.get_output_size()
 
-    def forward(self, inputs: NetworkBuffer) -> NetworkBuffer:
-        output = NetworkBuffer(np.zeros(self.get_output_size()), self.get_output_size())
-        unactivated = NetworkBuffer(np.empty(self.get_weight_count()), self.get_weight_count())
+    def forward(self, inputs: NetworkBuffer, save_layer_data=False) -> NetworkBuffer | tuple[
+        NetworkBuffer, NetworkBuffer]:
+        output = NetworkBuffer(np.zeros(self.get_output_size(), dtype=np.float32), self.get_output_size())
+        unreduced_outputs = NetworkBuffer(np.empty(self.get_weight_count(), dtype=np.float32), self.get_weight_count())
+        unactivated_outputs = NetworkBuffer(np.empty(self.get_output_size(), dtype=np.float32), self.get_output_size())
 
         self.forward_core.forward(queue, (self.get_input_size(), self.get_output_size()), None,
-                                  inputs.get_as_buffer(), unactivated.get_as_buffer(),
+                                  inputs.get_as_buffer(), unreduced_outputs.get_as_buffer(),
                                   self.weights.get_as_buffer(), np.int32(self.get_input_size())
                                   ).wait()
 
         self.forward_core.reduce_outputs(queue, (self.get_output_size(),), None,
-                                         unactivated.get_as_buffer(), output.get_as_buffer(),
-                                         self.biases.get_as_buffer(), np.int32(self.get_input_size()),
-                                         np.int32(self.get_output_size()), np.int32(self.__activation)
+                                         unreduced_outputs.get_as_buffer(), output.get_as_buffer(),
+                                         unactivated_outputs.get_as_buffer(), self.biases.get_as_buffer(),
+                                         np.int32(self.get_input_size()), np.int32(self.get_output_size()),
+                                         np.int32(self.__activation)
                                          ).wait()
 
+        if save_layer_data:
+            return output, unactivated_outputs
+
         return output
+
+    def backward(self, inputs: NetworkBuffer, outputs_activated: NetworkBuffer,
+                 outputs_unactivated: NetworkBuffer, output_error_gradients: Gradients,
+                 learning_rate: float) -> tuple[Gradients, Gradients, Gradients]:
+        core = load_core("training/full_pop")
+
+        # Create Gradients
+        weight_gradients = Gradients(np.empty(self.get_weight_count(), dtype=np.float32))
+        bias_gradients_unreduced = Gradients(np.empty(self.get_weight_count(), dtype=np.float32))
+        bias_gradients = Gradients(np.empty(self.get_bias_count(), dtype=np.float32))
+        input_gradients_unreduced = Gradients(np.empty(self.get_weight_count(), dtype=np.float32))
+        input_gradients = Gradients(np.empty(self.get_input_size(), dtype=np.float32))
+
+        # Step 1/3 - Perform calculations
+        core.backwards(queue, (self.get_input_size(), self.get_output_size()), None,
+                       inputs.get_as_buffer(), outputs_activated.get_as_buffer(),
+                       outputs_unactivated.get_as_buffer(), self.weights.get_as_buffer(),
+                       self.biases.get_as_buffer(), output_error_gradients.get_as_buffer(),
+                       input_gradients_unreduced.get_as_buffer(), weight_gradients.get_as_buffer(),
+                       bias_gradients_unreduced.get_as_buffer(), np.int32(self.get_input_size())
+                       ).wait()
+
+        # Step 2/3 - Reduce Input Gradients
+        core.reduce_input_error_gradients(queue, (self.get_input_size(),), None,
+                                          input_gradients_unreduced.get_as_buffer(),
+                                          input_gradients.get_as_buffer(),
+                                          np.int32(self.get_input_size()),
+                                          np.int32(self.get_output_size())
+                                          ).wait()
+
+        # Step 3/3 - Reduce Bias Gradients
+        core.reduce_bias_gradients(queue, (self.get_output_size(),), None,
+                                   bias_gradients_unreduced.get_as_buffer(),
+                                   bias_gradients.get_as_buffer(),
+                                   np.int32(self.get_input_size()),
+                                   np.int32(self.get_output_size())
+                                   ).wait()
+
+        return input_gradients, weight_gradients, bias_gradients

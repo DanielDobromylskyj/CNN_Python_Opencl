@@ -4,9 +4,6 @@ import buffers
 import layers
 import activations
 
-
-# Todo - Implement saving layer data for backpropagation / gradient calculations
-
 class InvalidNetwork(Exception):
     pass
 
@@ -43,21 +40,26 @@ class Network:
         if validate_network:
             validate_network_layout(self.layout)
 
-    def forward_pass(self, inputs, save_layer_data=False, for_display=False):
+    def forward_pass(self, inputs, save_layer_data=False,
+                     for_display=False):  # todo - save_layer_data -> return both activated and unactivated / None if data is not activated
         output_values = buffers.create_network_buffer_from_input(inputs)
 
-        save_values = []
+        save_values = [] if not save_layer_data else [(output_values, None)]
 
         for layer in self.layout:
-            output_values = layer.forward(output_values)
+            output_values = layer.forward(output_values, save_layer_data)
 
             if for_display:
                 save_values.append(output_values)
 
+            if save_layer_data:
+                output_values, other_value = output_values
+                save_values.append((output_values, other_value))
+
             if isinstance(output_values, buffers.NetworkBuffer) is False:  # likely a Filter output
                 output_values = buffers.combine_buffers(output_values)
 
-        if for_display:
+        if for_display or save_layer_data:
             return save_values
 
         if isinstance(output_values, buffers.NetworkBuffer):
@@ -65,8 +67,11 @@ class Network:
         else:
             return [output_value.get_as_array() for output_value in output_values]
 
-    def __calculate_gradients(self, inputs: np.ndarray, target: np.ndarray, learning_rate: float) -> list[tuple[buffers.Gradients, buffers.Gradients, buffers.Gradients]]:
-        pass
+    def backward_pass(self, inputs: np.ndarray, target: np.ndarray):
+        data = self.forward_pass(inputs, save_layer_data=True)
+
+        for layer_index in range(len(self.layout), 0, -1):
+            print(layer_index)
 
 
 if __name__ == "__main__":
@@ -77,6 +82,12 @@ if __name__ == "__main__":
         layers.FullyConnectedLayer(20*20*5, 2, activations.ReLU)
     ))
     print("made network")
+
+    rand_data = np.random.randn(30_000).astype(np.float32)
+
+    net.backward_pass(rand_data, np.array([0, 1]))
+    net.backward_pass(rand_data, np.array([0, 1]))
+    net.backward_pass(rand_data, np.array([0, 1]))
 
     v = viewer.viewer()
     v.display(net, np.random.randn(30_000).astype(np.float32))

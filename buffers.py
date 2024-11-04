@@ -43,16 +43,23 @@ class NetworkBuffer:
 
 
 class Gradients:
-    def __init__(self, gradients):
-        self.__gradients = np.ndarray(gradients, dtype=np.float32)
+    def __init__(self, gradients: np.ndarray):
+        self.__gradients = cl.Buffer(ctx, mf.READ_WRITE | mf.USE_HOST_PTR, gradients.nbytes, hostbuf=gradients)
+        self.__shape = gradients.shape
 
-    def get_gradients(self):
+    def get_shape(self):
+        return self.__shape
+
+    def get_as_buffer(self):
         return self.__gradients
 
+    def get_as_array(self):
+        output = np.empty(self.get_shape(), dtype=np.float32)
+        cl.enqueue_copy(queue, output, self.get_as_buffer()).wait()
+        return output
+
     def add(self, other_gradients):
-        return Gradients(self.get_gradients() + other_gradients.get_gradients())
+        return Gradients(self.get_as_array() + other_gradients.get_as_array())
 
     def divide(self, value: int):
-        return Gradients(self.get_gradients() / value)
-
-
+        return Gradients(self.get_as_array() / value)

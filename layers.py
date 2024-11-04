@@ -213,7 +213,8 @@ class FullyConnectedLayer(Layer):
                        outputs_unactivated.get_as_buffer(), self.weights.get_as_buffer(),
                        self.biases.get_as_buffer(), output_error_gradients.get_as_buffer(),
                        input_gradients_unreduced.get_as_buffer(), weight_gradients.get_as_buffer(),
-                       bias_gradients_unreduced.get_as_buffer(), np.int32(self.get_input_size())
+                       bias_gradients_unreduced.get_as_buffer(), np.int32(self.get_input_size()),
+                       np.int32(self.__activation)
                        ).wait()
 
         # Step 2/3 - Reduce Input Gradients

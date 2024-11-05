@@ -58,9 +58,6 @@ class Network:
                 output_values, other_value = output_values
                 save_values.append((output_values, other_value))
 
-            if isinstance(output_values, buffers.NetworkBuffer) is False:  # likely a Filter output
-                output_values = buffers.combine_buffers(output_values)
-
         if for_display or save_layer_data:
             return save_values
 
@@ -84,11 +81,11 @@ class Network:
         if isinstance(data, buffers.NetworkBuffer):
             return data
 
-        if isinstance(data, list) or isinstance(data, tuple):
-            if isinstance(data[0], buffers.NetworkBuffer):
-                return buffers.combine_buffers(data)
+        if isinstance(data, buffers.BufferList):
+            return data
 
-            return buffers.NetworkBuffer(np.array(data, dtype=np.float32), (len(data),))
+        if isinstance(data, list) or isinstance(data, tuple):
+            data = np.array(data)
 
         if isinstance(data, np.ndarray):
             return buffers.NetworkBuffer(data, data.shape)
@@ -103,9 +100,9 @@ class Network:
 
         output_error_gradients = self.__convert_to_gradients(error)
 
-        for layer_index in range(len(self.layout) - 1, -1, -1):
-            print("Backprop On Layer Index:", layer_index)
+        gradient_data = [[None, None] for j in range(len(self.layout))]
 
+        for layer_index in range(len(self.layout) - 1, -1, -1):
             # Extract Inputs
             activated_inputs, unactivated_inputs = data[layer_index]
 
@@ -123,6 +120,48 @@ class Network:
             # Prep for next layer
             output_error_gradients = input_gradients
 
+            gradient_data[layer_index][0] = weight_gradients
+            gradient_data[layer_index][1] = bias_gradients
+
+        return gradient_data
+
+    @staticmethod
+    def __sum_array(data):
+        summed_buffer_list = data[0]
+        for item in data[1:]:
+            if isinstance(item, buffers.BufferList):
+                for buffer_index, buffer in enumerate(item):
+                    summed_buffer_list[buffer_index] += buffer
+            else:
+                summed_buffer_list += item
+
+        return summed_buffer_list
+
+    def __condense_gradients(self, gradient_data, sub_index):
+        total_gradients_to_sum = [[] for j in range(len(self.layout))]
+
+        for sample in gradient_data:
+            for layer_index, layer in enumerate(sample):
+                data = layer[sub_index]
+                total_gradients_to_sum[layer_index].append(data)
+
+        return [
+            self.__sum_array(layer_gradients)
+            for layer_gradients in total_gradients_to_sum
+        ]
+
+    def compute_epoch(self, training_data, learning_rate: float):
+        gradient_data = [
+            self.backward_pass(sample, target, learning_rate)
+            for sample, target in training_data
+        ]
+
+        weight_gradients = self.__condense_gradients(gradient_data, 0)
+        bias_gradients = self.__condense_gradients(gradient_data, 1)
+
+        for layer_index, layer in enumerate(self.layout):
+            layer.apply_gradients(weight_gradients[layer_index], bias_gradients[layer_index])
+
 
 if __name__ == "__main__":
     import viewer
@@ -134,12 +173,15 @@ if __name__ == "__main__":
     print("made network")
 
     rand_data = np.random.randn(30_000).astype(np.float32)
+    v = viewer.viewer()
 
     l_rate = 0.1
-    net.backward_pass(rand_data, np.array([0, 1]), l_rate)
-    net.backward_pass(rand_data, np.array([0, 1]), l_rate)
-    net.backward_pass(rand_data, np.array([0, 1]), l_rate)
 
-    v = viewer.viewer()
-    v.display(net, np.random.randn(30_000).astype(np.float32))
-    # v.display(net, np.ones(30_000).astype(np.float32))
+    for i in range(10):
+        print("Epoch", i+1)
+        net.compute_epoch(
+            [(rand_data, np.array([0, 1])), (rand_data, np.array([0, 1]))],
+            l_rate
+        )
+
+        v.display(net, rand_data)

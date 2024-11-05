@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-
+import matplotlib
 import layers
 
 
@@ -8,7 +8,9 @@ class viewer:
         self.fig = None
         self.axes = None
 
-    def display(self, network, inputs):
+        matplotlib.use('TkAgg')
+
+    def display(self, network, inputs, target=None):
         max_y = max(
             [layer.get_filter_count() if isinstance(layer, layers.ConvolutedLayer) else 1 for layer in network.layout])
 
@@ -21,15 +23,23 @@ class viewer:
 
         data = network.forward_pass(inputs, for_display=True)
 
+        if target is not None:
+            error = sum([
+                abs(target[i] - data[-1][i])
+                for i in range(len(target))
+            ])
+
+            plt.title(f"Current Error: {error}")
+
         for i, dat in enumerate(data):
             if isinstance(network.layout[i], layers.FullyConnectedLayer):
                 self.axes[max_y // 2][i].imshow([dat.get_as_array()], cmap='plasma', interpolation='nearest')
 
             elif isinstance(network.layout[i], layers.ConvolutedLayer):
-                for ci, chunk in enumerate(dat):
-                    chunk_data = chunk.get_as_array().reshape(network.layout[i].get_output_shape())
+                for ci in range(len(dat)):
+                    chunk_data = dat.get_as_array(ci).reshape(network.layout[i].get_output_shape())
 
-                    self.axes[ci][i].imshow(chunk_data, cmap='plasma', interpolation='nearest', vmax=1.5, vmin=-1.5)
+                    self.axes[ci][i].imshow(chunk_data, cmap='plasma', interpolation='nearest')
 
         plt.tight_layout()
         plt.draw()  # Use plt.draw() to update the figure

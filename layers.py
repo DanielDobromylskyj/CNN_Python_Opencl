@@ -6,7 +6,7 @@ import pyopencl as cl
 import numpy as np
 import math
 
-from buffers import NetworkBuffer, Gradients
+from buffers import *
 
 ctx = cl.create_some_context()
 queue = cl.CommandQueue(ctx)
@@ -44,7 +44,7 @@ class Layer:
         """ Calculate the gradients and errors for weights, biases and the 'next' layer """
         raise NotImplementedError
 
-    def apply_gradients(self, weight_gradients: Gradients, bias_gradients: Gradients) -> None:
+    def apply_gradients(self, weight_gradients: Gradients | BufferList, bias_gradients: Gradients | BufferList) -> None:
         """ Applies the gradients we have calculated """
         raise NotImplementedError
 
@@ -67,7 +67,8 @@ class ConvolutedLayer(Layer):
 
         # Don't spend computing power generating weights to just overwrite them when loading.
         self.weights = [
-            NetworkBuffer(relu_weight_init((self.get_weight_count(),), self.get_weight_count()), self.get_weight_count())
+            NetworkBuffer(relu_weight_init((self.get_weight_count(),), self.get_weight_count()),
+                          self.get_weight_count())
             for i in range(self.__filter_count)
         ] if loading is False else None
 
@@ -118,7 +119,7 @@ class ConvolutedLayer(Layer):
         biases = self.biases[filter_index]
 
         # maybe this could be optimised, as we are writing an empty buffer to the gpu, instead of just making an empty gpu buffer
-        output = NetworkBuffer(np.zeros(self.get_output_size()), self.get_output_size())
+        output = NetworkBuffer(np.zeros(self.get_output_size(), dtype=np.float32), self.get_output_size())
 
         filter_shape = self.get_true_kernel_shape()
         input_shape = self.get_true_input_shape()
@@ -133,13 +134,86 @@ class ConvolutedLayer(Layer):
         return output
 
     def forward(self, inputs: NetworkBuffer, save_layer_data=False) -> tuple[Any] | tuple[tuple[Any], None]:
-        data = tuple(
+        data = BufferList(tuple(
             self._forward(filter_index, inputs) for filter_index in range(self.__filter_count)
-        )
+        ))
 
         if save_layer_data:
             return data, None
         return data
+
+    def _backward(self, core, filter_index, inputs: NetworkBuffer, outputs_activated: NetworkBuffer,
+                  outputs_unactivated: NetworkBuffer, output_error_gradients: Gradients,
+                  learning_rate: float) -> tuple[Gradients, Gradients, Gradients]:
+        input_gradients = Gradients(np.empty(self.get_input_size(), dtype=np.float32))
+        weight_gradients_unreduced = Gradients(np.empty(self.get_input_size(), dtype=np.float32))
+        weight_gradients = Gradients(np.empty(self.get_weight_count(), dtype=np.float32))
+        bias_gradients = Gradients(np.empty(self.get_bias_count(), dtype=np.float32))
+
+        filter_shape = self.get_true_kernel_shape()
+        input_shape = self.get_true_input_shape()
+        output_shape = self.get_output_shape()
+
+        queue.finish()
+
+        core.filter(queue, output_shape, None,
+                    input_gradients.get_as_buffer(),
+                    self.weights[filter_index].get_as_buffer(),
+                    self.biases[filter_index].get_as_buffer(),
+                    output_error_gradients.get_as_buffer(),
+                    inputs.get_as_buffer(),
+                    outputs_activated.get_as_buffer(),
+                    weight_gradients_unreduced.get_as_buffer(),
+                    bias_gradients.get_as_buffer(),
+                    np.int32(input_shape[0]),
+                    np.int32(input_shape[1]),
+                    np.int32(filter_shape[0]),
+                    np.int32(filter_shape[1]),
+                    np.int32(self.get_output_shape()[0]),
+                    np.float32(learning_rate)
+                    ).wait()
+
+        core.sum_gradients(
+            queue, filter_shape, None,
+            weight_gradients_unreduced.get_as_buffer(),
+            weight_gradients.get_as_buffer(),
+            np.int32(filter_shape[0]),
+            np.int32(filter_shape[1]),
+            np.int32(input_shape[0]),
+            np.int32(input_shape[1]),
+            np.int32(self.get_output_shape()[0]),
+            np.int32(self.get_output_shape()[1])
+        ).wait()
+
+        queue.finish()
+
+        return input_gradients, weight_gradients, bias_gradients
+
+    def backward(self, inputs: NetworkBuffer, outputs_activated: NetworkBuffer,
+                 outputs_unactivated: NetworkBuffer, output_error_gradients: Gradients,
+                 learning_rate: float) -> tuple[Gradients, Gradients, Gradients]:
+        core = load_core("training/kernel")
+
+        # Make it an index able object
+        output_error_gradients = convert_gradients_to_buffer_list(output_error_gradients, 1)
+
+        return rearrange_feature_map_output(tuple(
+            self._backward(
+                core, filter_index,
+                inputs,
+                outputs_activated.get_network_buffer(filter_index),
+                None,
+                output_error_gradients.get_network_buffer(filter_index),
+                learning_rate
+            ) for filter_index in range(self.__filter_count)
+        ))
+
+    def apply_gradients(self, weight_gradients: BufferList, bias_gradients: BufferList) -> None:
+        for filter_index, weight_gradient in enumerate(weight_gradients):
+            self.weights[filter_index] += weight_gradient
+
+        for filter_index, bias_gradient in enumerate(bias_gradients):
+            self.biases[filter_index] += bias_gradient
 
 
 class FullyConnectedLayer(Layer):
@@ -234,3 +308,7 @@ class FullyConnectedLayer(Layer):
                                    ).wait()
 
         return input_gradients, weight_gradients, bias_gradients
+
+    def apply_gradients(self, weight_gradients: Gradients, bias_gradients: Gradients) -> None:
+        self.weights += weight_gradients
+        self.biases += bias_gradients

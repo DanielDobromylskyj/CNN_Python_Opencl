@@ -19,6 +19,25 @@ def combine_buffers(buffers):  # todo - find a better / faster way of doing this
     return NetworkBuffer(summed, summed.shape)
 
 
+def convert_gradients_to_buffer_list(buffer, chunk_size):
+    data = buffer.get_as_array()
+    chunks = [Gradients(data[i:i + chunk_size]) for i in range(0, len(data), chunk_size)]
+    return BufferList(chunks)
+
+
+def rearrange_feature_map_output(outputs):
+    input_gradients = []
+    weight_gradients = []
+    bias_gradients = []
+
+    for kernel in outputs:
+        input_gradients.append(kernel[0])
+        weight_gradients.append(kernel[1])
+        bias_gradients.append(kernel[2])
+
+    return BufferList(input_gradients), BufferList(weight_gradients), BufferList(bias_gradients)
+
+
 class NetworkBuffer:
     def __init__(self, data: np.ndarray, shape: tuple[int]):
         self.__buffer = cl.Buffer(ctx, mf.READ_WRITE | mf.USE_HOST_PTR, data.nbytes, hostbuf=data)
@@ -41,6 +60,48 @@ class NetworkBuffer:
         cl.enqueue_copy(queue, output, self.get_as_buffer()).wait()
         return output
 
+    def __add__(self, other):
+        if isinstance(other, NetworkBuffer) or isinstance(other, Gradients):
+            return NetworkBuffer(self.get_as_array() + other.get_as_array(), self.__shape)
+        return NetworkBuffer(self.get_as_array() + other, self.__shape)
+
+
+class BufferList:
+    def __init__(self, buffers):
+        self.__buffers = buffers
+
+    def get_as_buffer(self, index=None):
+        if index is None:
+            return combine_buffers(self.__buffers).get_as_buffer()
+        else:
+            return self.__buffers[index].get_as_buffer()
+
+    def get_network_buffer(self, index):
+        return self.__buffers[index]
+
+    def get_as_array(self, index=None):
+        if index is None:
+            return tuple([
+                buffer.get_as_array()
+                for buffer in self.__buffers
+            ])
+
+        else:
+            return self.__buffers[index].get_as_array()
+
+    def __len__(self):
+        return len(self.__buffers)
+
+    def __iter__(self):
+        for buffer in self.__buffers:
+            yield buffer
+
+    def __getitem__(self, item):
+        return self.__buffers[item]
+
+    def __setitem__(self, key, value):
+        self.__buffers[key] = value
+
 
 class Gradients:
     def __init__(self, gradients: np.ndarray):
@@ -58,8 +119,9 @@ class Gradients:
         cl.enqueue_copy(queue, output, self.get_as_buffer()).wait()
         return output
 
-    def add(self, other_gradients):
+    def __add__(self, other_gradients):
         return Gradients(self.get_as_array() + other_gradients.get_as_array())
 
     def divide(self, value: int):
         return Gradients(self.get_as_array() / value)
+

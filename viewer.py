@@ -24,8 +24,10 @@ class viewer:
         data = network.forward_pass(inputs, for_display=True)
 
         if target is not None:
+            outputs = data[-1].get_as_array()
+
             error = sum([
-                abs(target[i] - data[-1][i])
+                abs(target[i] - outputs[i])
                 for i in range(len(target))
             ])
 

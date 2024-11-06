@@ -65,6 +65,9 @@ class NetworkBuffer:
             return NetworkBuffer(self.get_as_array() + other.get_as_array(), self.__shape)
         return NetworkBuffer(self.get_as_array() + other, self.__shape)
 
+    def __truediv__(self, other):
+        return NetworkBuffer(self.get_as_array() / other, self.__shape)
+
 
 class BufferList:
     def __init__(self, buffers):
@@ -122,6 +125,8 @@ class Gradients:
     def __add__(self, other_gradients):
         return Gradients(self.get_as_array() + other_gradients.get_as_array())
 
-    def divide(self, value: int):
-        return Gradients(self.get_as_array() / value)
+    def __truediv__(self, other):
+        return Gradients(self.get_as_array() / other)
 
+    def __neg__(self):
+        return Gradients(self.get_as_array() * -1)

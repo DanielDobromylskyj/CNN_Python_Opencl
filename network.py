@@ -1,8 +1,12 @@
+import random
+import time
 import numpy as np
+import math
 
 import buffers
 import layers
 import activations
+import file_api
 
 
 class InvalidNetwork(Exception):
@@ -43,7 +47,7 @@ class Network:
             validate_network_layout(self.layout)
 
     def forward_pass(self, inputs, save_layer_data=False,
-                     for_display=False):  # todo - save_layer_data -> return both activated and unactivated / None if data is not activated
+                     for_display=False):
         output_values = buffers.create_network_buffer_from_input(inputs)
 
         save_values = [] if not save_layer_data else [(output_values, None)]
@@ -103,8 +107,7 @@ class Network:
         gradient_data = [[None, None] for j in range(len(self.layout))]
 
         for layer_index in range(len(self.layout) - 1, -1, -1):
-            # Extract Inputs
-            activated_inputs, unactivated_inputs = data[layer_index]
+            activated_inputs, unactivated_inputs = data[layer_index]  # Extract Inputs
 
             # Extract Outputs - Add one, as we have inputs in front of the data
             activated_outputs, unactivated_outputs = data[layer_index + 1]
@@ -160,7 +163,50 @@ class Network:
         bias_gradients = self.__condense_gradients(gradient_data, 1)
 
         for layer_index, layer in enumerate(self.layout):
-            layer.apply_gradients(weight_gradients[layer_index], bias_gradients[layer_index])
+            if np.any(np.isnan(weight_gradients[layer_index].get_as_array()) | np.isinf(
+                    weight_gradients[layer_index].get_as_array())):
+                raise ValueError("[FINAL CHECK] NaN or Inf Found In Weights (NaN, Inf): " + str(
+                    np.any(np.isnan(weight_gradients[layer_index].get_as_array()))) + ", " + str(
+                    np.any(np.isinf(weight_gradients[layer_index].get_as_array()))))
+
+            if np.any(np.isnan(bias_gradients[layer_index].get_as_array()) | np.isinf(
+                    bias_gradients[layer_index].get_as_array())):
+                raise ValueError("[FINAL CHECK] NaN or Inf Found In Biases (NaN, Inf): " + str(
+                    np.any(np.isnan(bias_gradients[layer_index].get_as_array()))) + ", " + str(
+                    np.any(np.isinf(bias_gradients[layer_index].get_as_array()))))
+
+            layer.apply_gradients(weight_gradients[layer_index], bias_gradients[layer_index], len(training_data))
+
+    def test_network(self, test_data, tests=5, decimals=3):
+        errors = []
+        for j in range(tests):
+            inputs, target = random.choice(test_data)
+            outputs = self.forward_pass(inputs)
+            errors.append(sum([
+                abs(outputs[node] - target[node]) for node in range(len(outputs))
+            ]))
+
+        return round(sum(errors) / tests, decimals), round(min(errors), decimals), round(max(errors), decimals)
+
+    def train(self, training_data, test_data, epochs, learning_rate, show_stats=True):
+        start = time.time()
+
+        for epoch in range(epochs):
+            self.compute_epoch(training_data, learning_rate)
+
+            elapsed = time.time() - start
+
+            if show_stats:
+                average_error, min_error, max_error = self.test_network(test_data)
+
+                time_left_in_s = (elapsed / (epoch+1)) * (epochs-epoch)
+                min_left = time_left_in_s // 60
+                sec_left = time_left_in_s - (min_left * 60)
+
+                percentage_bar_max_length = 50
+                percentage_bar_done = math.floor(((epoch+1) / epochs) * percentage_bar_max_length)
+
+                print(f"\r|{'#' * percentage_bar_done}{' ' * (percentage_bar_max_length - percentage_bar_done)}| Average Error: {average_error} | ETA: {round(min_left)}m {math.floor(sec_left)}s", end="", flush=True)
 
 
 if __name__ == "__main__":
@@ -168,20 +214,15 @@ if __name__ == "__main__":
 
     net = Network((
         layers.ConvolutedLayer((100, 100), (5, 5), filter_count=5, colour_depth=3),
-        layers.FullyConnectedLayer(20 * 20 * 5, 2, activations.ReLU)
+        layers.FullyConnectedLayer(20 * 20 * 5, 2, activations.Sigmoid)
     ))
     print("made network")
 
     rand_data = np.random.randn(30_000).astype(np.float32)
     v = viewer.viewer()
 
-    l_rate = 0.1
+    l_rate = 0.001
+    train_data = [(rand_data, np.array([0, 1])), (rand_data, np.array([0, 1]))]
+    test_data = [(rand_data, np.array([0, 1]))]
 
-    for i in range(10):
-        print("Epoch", i+1)
-        net.compute_epoch(
-            [(rand_data, np.array([0, 1])), (rand_data, np.array([0, 1]))],
-            l_rate
-        )
-
-        v.display(net, rand_data)
+    net.train(train_data, test_data, 50, l_rate)

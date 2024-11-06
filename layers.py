@@ -33,6 +33,10 @@ def relu_weight_init(size, fan_in, dtype=np.float32):
     return np.random.randn(mul(size)).astype(dtype=dtype) * np.sqrt(2.0 / fan_in)
 
 
+def sigmoid_weight_init(size, fan_in, dtype=np.float32):
+    return np.random.randn(np.prod(size)).astype(dtype) * np.sqrt(1.0 / fan_in)
+
+
 class Layer:
     def forward(self, inputs: NetworkBuffer, save_layer_data=False):
         """ Perform a forward pass over the layer """
@@ -44,7 +48,8 @@ class Layer:
         """ Calculate the gradients and errors for weights, biases and the 'next' layer """
         raise NotImplementedError
 
-    def apply_gradients(self, weight_gradients: Gradients | BufferList, bias_gradients: Gradients | BufferList) -> None:
+    def apply_gradients(self, weight_gradients: Gradients | BufferList, bias_gradients: Gradients | BufferList,
+                        count: int) -> None:
         """ Applies the gradients we have calculated """
         raise NotImplementedError
 
@@ -57,7 +62,7 @@ class Layer:
 
 class ConvolutedLayer(Layer):
     def __init__(self, input_size: tuple[int, int], kernel_size: tuple[int, int], filter_count: int,
-                 colour_depth: int = 1, loading: bool = False):
+                 colour_depth: int = 1, loading: bool = False):  # todo - allow for sigmoid / other activations
         self.__filter_count = filter_count
         self.__input_size = input_size
         self.__kernel_size = kernel_size
@@ -145,16 +150,14 @@ class ConvolutedLayer(Layer):
     def _backward(self, core, filter_index, inputs: NetworkBuffer, outputs_activated: NetworkBuffer,
                   outputs_unactivated: NetworkBuffer, output_error_gradients: Gradients,
                   learning_rate: float) -> tuple[Gradients, Gradients, Gradients]:
-        input_gradients = Gradients(np.empty(self.get_input_size(), dtype=np.float32))
-        weight_gradients_unreduced = Gradients(np.empty(self.get_input_size(), dtype=np.float32))
-        weight_gradients = Gradients(np.empty(self.get_weight_count(), dtype=np.float32))
-        bias_gradients = Gradients(np.empty(self.get_bias_count(), dtype=np.float32))
+        input_gradients = Gradients(np.zeros(self.get_input_size(), dtype=np.float32))
+        weight_gradients_unreduced = Gradients(np.zeros(self.get_input_size(), dtype=np.float32))
+        weight_gradients = Gradients(np.zeros(self.get_weight_count(), dtype=np.float32))
+        bias_gradients = Gradients(np.zeros(self.get_bias_count(), dtype=np.float32))
 
         filter_shape = self.get_true_kernel_shape()
         input_shape = self.get_true_input_shape()
         output_shape = self.get_output_shape()
-
-        queue.finish()
 
         core.filter(queue, output_shape, None,
                     input_gradients.get_as_buffer(),
@@ -173,6 +176,12 @@ class ConvolutedLayer(Layer):
                     np.float32(learning_rate)
                     ).wait()
 
+        if np.any(np.isnan(weight_gradients_unreduced.get_as_array()) | np.isinf(
+                weight_gradients_unreduced.get_as_array())):
+            raise ValueError("[KERNEL][NO SUM] NaN or Inf Found In Weights (NaN, Inf): " + str(
+                np.any(np.isnan(weight_gradients_unreduced.get_as_array()))) + ", " + str(
+                np.any(np.isinf(weight_gradients_unreduced.get_as_array()))))
+
         core.sum_gradients(
             queue, filter_shape, None,
             weight_gradients_unreduced.get_as_buffer(),
@@ -181,11 +190,17 @@ class ConvolutedLayer(Layer):
             np.int32(filter_shape[1]),
             np.int32(input_shape[0]),
             np.int32(input_shape[1]),
-            np.int32(self.get_output_shape()[0]),
-            np.int32(self.get_output_shape()[1])
+            np.int32(self.get_output_shape()[0] // filter_shape[0]),
+            np.int32(self.get_output_shape()[1] // filter_shape[1])
         ).wait()
 
         queue.finish()
+
+        if np.any(np.isnan(weight_gradients.get_as_array()) | np.isinf(
+                weight_gradients.get_as_array())):
+            raise ValueError("[KERNEL][AFTER SUM] NaN or Inf Found In Weights (NaN, Inf): " + str(
+                np.any(np.isnan(weight_gradients.get_as_array()))) + ", " + str(
+                np.any(np.isinf(weight_gradients.get_as_array()))))
 
         return input_gradients, weight_gradients, bias_gradients
 
@@ -208,12 +223,12 @@ class ConvolutedLayer(Layer):
             ) for filter_index in range(self.__filter_count)
         ))
 
-    def apply_gradients(self, weight_gradients: BufferList, bias_gradients: BufferList) -> None:
+    def apply_gradients(self, weight_gradients: BufferList, bias_gradients: BufferList, count: int) -> None:
         for filter_index, weight_gradient in enumerate(weight_gradients):
-            self.weights[filter_index] += weight_gradient
+            self.weights[filter_index] += weight_gradient / count
 
         for filter_index, bias_gradient in enumerate(bias_gradients):
-            self.biases[filter_index] += bias_gradient
+            self.biases[filter_index] += bias_gradient / count
 
 
 class FullyConnectedLayer(Layer):
@@ -222,8 +237,11 @@ class FullyConnectedLayer(Layer):
         self.__output_size = output_size
         self.__activation = activation
 
-        # todo - use different weight inits depending on activation
-        self.weights = NetworkBuffer(relu_weight_init((input_size, output_size), input_size), self.get_weight_count())
+        self.weights = NetworkBuffer(
+            relu_weight_init((input_size, output_size), input_size) if activation == 1 else
+            sigmoid_weight_init((input_size, output_size), input_size),
+            self.get_weight_count())
+
         self.biases = NetworkBuffer(np.zeros(self.get_bias_count()), self.get_bias_count())
 
         self.forward_core = load_core("full_pop")
@@ -288,7 +306,7 @@ class FullyConnectedLayer(Layer):
                        self.biases.get_as_buffer(), output_error_gradients.get_as_buffer(),
                        input_gradients_unreduced.get_as_buffer(), weight_gradients.get_as_buffer(),
                        bias_gradients_unreduced.get_as_buffer(), np.int32(self.get_input_size()),
-                       np.int32(self.__activation)
+                       np.int32(self.__activation), np.float32(learning_rate)
                        ).wait()
 
         # Step 2/3 - Reduce Input Gradients
@@ -307,8 +325,14 @@ class FullyConnectedLayer(Layer):
                                    np.int32(self.get_output_size())
                                    ).wait()
 
+        if np.any(np.isnan(weight_gradients.get_as_array()) | np.isinf(
+                weight_gradients.get_as_array())):
+            raise ValueError("[FULL POP] NaN or Inf Found In Weights (NaN, Inf): " + str(
+                np.any(np.isnan(weight_gradients.get_as_array()))) + ", " + str(
+                np.any(np.isinf(weight_gradients.get_as_array()))))
+
         return input_gradients, weight_gradients, bias_gradients
 
-    def apply_gradients(self, weight_gradients: Gradients, bias_gradients: Gradients) -> None:
-        self.weights += weight_gradients
-        self.biases += bias_gradients
+    def apply_gradients(self, weight_gradients: Gradients, bias_gradients: Gradients, count: int) -> None:
+        self.weights += weight_gradients / count
+        self.biases += bias_gradients / count

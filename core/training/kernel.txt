@@ -20,16 +20,16 @@ __kernel void filter(__global float *input_error, __global float *weights, __glo
     int x_index = x * filter_width;
     int y_index = y * filter_height;
 
-
+    float output_error_value = -output_error[0];
     for (int dx = 0; dx < filter_width; dx++) {
        for (int dy = 0; dy < filter_height; dy++) {
             int input_index = ((y_index + dy) * input_width) + (x_index + dx);
-            int error_out_index = dy * filter_width + dx;
+            int error_out_index = y * filter_width + x;
 
-            float weight_error = input_values[input_index] * output_error[error_out_index] * learning_rate;
+            float weight_error = input_values[input_index] * output_error_value * learning_rate;
             weight_nudges[input_index] = weight_error;
 
-            float error = output_error[error_out_index] * weights[input_index];  // * learning_rate;
+            float error = output_error_value * weights[input_index];
             input_error[input_index] = error;
        }
     }
@@ -43,7 +43,7 @@ __kernel void sum_gradients(__global float *errors, __global float *summed, int 
     float local_sum = 0;
     for (int dx = 0; dx < blocks_per_x; dx++) {
        for (int dy = 0; dy < blocks_per_y; dy++) {
-            int index = (dy * filter_height + y) * error_width + (dx * filter_width + x);
+            int index = (y * filter_height + dy) * error_width + (x * filter_width + dx);
             local_sum += errors[index];
        }
     }

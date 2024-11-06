@@ -5,6 +5,7 @@ from typing import List, Any
 import pyopencl as cl
 import numpy as np
 import math
+import base64
 
 from buffers import *
 
@@ -37,6 +38,21 @@ def sigmoid_weight_init(size, fan_in, dtype=np.float32):
     return np.random.randn(np.prod(size)).astype(dtype) * np.sqrt(1.0 / fan_in)
 
 
+class LayerCodes:
+    def __init__(self):
+        self.__code_to_layer = {
+            "FP": FullyConnectedLayer,
+            "CV": ConvolutedLayer
+        }
+
+        self.__layer_to_code = {v: k for k, v in self.__code_to_layer.items()}
+
+    def __getitem__(self, item):
+        if type(item) is bytes:
+            return self.__code_to_layer[item.decode()]
+        return self.__layer_to_code[item.__class__].encode()
+
+
 class Layer:
     def forward(self, inputs: NetworkBuffer, save_layer_data=False):
         """ Perform a forward pass over the layer """
@@ -58,6 +74,13 @@ class Layer:
 
     def get_total_nodes_out(self):
         raise NotImplementedError("Layer does not have a implemented 'get_total_nodes_out' method")
+
+    def serialize(self):
+        raise NotImplementedError
+
+    @staticmethod
+    def deserialize(data):
+        raise NotImplementedError
 
 
 class ConvolutedLayer(Layer):
@@ -230,9 +253,47 @@ class ConvolutedLayer(Layer):
         for filter_index, bias_gradient in enumerate(bias_gradients):
             self.biases[filter_index] += bias_gradient / count
 
+    def serialize(self):
+        return b",".join([
+            base64.b64encode(
+                weight.get_as_array().tobytes()
+            ) for weight in self.weights
+        ]) + b".." + b",".join([
+            base64.b64encode(
+                bias.get_as_array().tobytes()
+            ) for bias in self.biases
+        ]) + f"..{self.__filter_count}..{self.__input_size}..{self.__kernel_size}..{self.__colour_depth}".encode()
+
+
+    @staticmethod
+    def deserialize(data):
+        weights, biases, filter_count, input_size, kernel_size, colour_depth = data.split(b"..")
+
+        layer = ConvolutedLayer(
+            eval(input_size.decode()),
+            eval(kernel_size.decode()),
+            int(filter_count.decode()),
+            int(colour_depth.decode()),
+            loading=True
+        )
+
+        layer.weights = [
+            create_network_buffer_from_input(np.frombuffer(
+                base64.b64decode(weight_bytes), dtype=np.float32
+            )) for weight_bytes in weights.split(b",")
+        ]
+
+        layer.biases = [
+            create_network_buffer_from_input(np.frombuffer(
+                base64.b64decode(bias_bytes), dtype=np.float32
+            )) for bias_bytes in biases.split(b",")
+        ]
+
+        return layer
+
 
 class FullyConnectedLayer(Layer):
-    def __init__(self, input_size: int, output_size: int, activation: int):
+    def __init__(self, input_size: int, output_size: int, activation: int, loading: bool = False):
         self.__input_size = input_size
         self.__output_size = output_size
         self.__activation = activation
@@ -240,9 +301,11 @@ class FullyConnectedLayer(Layer):
         self.weights = NetworkBuffer(
             relu_weight_init((input_size, output_size), input_size) if activation == 1 else
             sigmoid_weight_init((input_size, output_size), input_size),
-            self.get_weight_count())
+            self.get_weight_count()) if loading is False else None
 
-        self.biases = NetworkBuffer(np.zeros(self.get_bias_count()), self.get_bias_count())
+        self.biases = NetworkBuffer(
+            np.zeros(self.get_bias_count()), self.get_bias_count()
+        ) if loading is False else None
 
         self.forward_core = load_core("full_pop")
 
@@ -336,3 +399,29 @@ class FullyConnectedLayer(Layer):
     def apply_gradients(self, weight_gradients: Gradients, bias_gradients: Gradients, count: int) -> None:
         self.weights += weight_gradients / count
         self.biases += bias_gradients / count
+
+    def serialize(self):
+        return base64.b64encode(self.weights.get_as_array().tobytes()) + b".." + base64.b64encode(
+            self.biases.get_as_array().tobytes()) + f"..{self.__input_size}..{self.__output_size}..{self.__activation}".encode()
+
+
+    @staticmethod
+    def deserialize(data):
+        weights, biases, input_size, output_size, activation = data.split(b"..")
+
+        layer = FullyConnectedLayer(
+            eval(input_size.decode()),
+            eval(output_size.decode()),
+            int(activation.decode()),
+            loading=True
+        )
+
+        layer.weights = create_network_buffer_from_input(
+            np.frombuffer(base64.b64decode(weights), dtype=np.float32)
+        )
+
+        layer.biases = create_network_buffer_from_input(
+            np.frombuffer(base64.b64decode(biases), dtype=np.float32)
+        )
+
+        return layer

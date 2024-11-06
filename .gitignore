@@ -2,3 +2,4 @@
 /openslide-win64
 /trainingData
 /__pycache__
+*.pyn

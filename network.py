@@ -208,6 +208,34 @@ class Network:
 
                 print(f"\r|{'#' * percentage_bar_done}{' ' * (percentage_bar_max_length - percentage_bar_done)}| Average Error: {average_error} | ETA: {round(min_left)}m {math.floor(sec_left)}s", end="", flush=True)
 
+    def save(self, path):
+        file = file_api.File(path)
+
+        layer_codes = layers.LayerCodes()
+        for layer_id, layer in enumerate(self.layout):
+            file.segments[f"layer_{layer_id}"] = layer_codes[layer] + layer.serialize()
+        file.write()
+
+    @staticmethod
+    def load(path):
+        file = file_api.File(path)
+        file.load()
+
+        layer_codes = layers.LayerCodes()
+        layout = []
+
+        for layer_id in range(len(file.segments.keys())):
+            layer_raw_data = file.segments[f"layer_{layer_id}"]
+
+            code = layer_raw_data[:2]
+            layer_data = layer_raw_data[2:]
+
+            layer_class = layer_codes[code]
+            layer_instance = layer_class.deserialize(layer_data)
+            layout.append(layer_instance)
+
+        return Network(tuple(layout))
+
 
 if __name__ == "__main__":
     import viewer
@@ -216,6 +244,11 @@ if __name__ == "__main__":
         layers.ConvolutedLayer((100, 100), (5, 5), filter_count=5, colour_depth=3),
         layers.FullyConnectedLayer(20 * 20 * 5, 2, activations.Sigmoid)
     ))
+
+    net.save("test.pyn")
+
+    net = Network.load("test.pyn")
+
     print("made network")
 
     rand_data = np.random.randn(30_000).astype(np.float32)

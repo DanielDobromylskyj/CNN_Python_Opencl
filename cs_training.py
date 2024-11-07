@@ -39,6 +39,6 @@ if __name__ == "__main__":
 
     l_rate = 0.1
 
-    net.train(trainingData[10:15], trainingData[10:15], 20, l_rate)
+    net.train([trainingData[0]], [trainingData[0]], 500, l_rate)
 
     net.save("training.pyn")

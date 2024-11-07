@@ -206,7 +206,7 @@ class Network:
                 percentage_bar_max_length = 50
                 percentage_bar_done = math.floor(((epoch+1) / epochs) * percentage_bar_max_length)
 
-                print(f"\r|{'#' * percentage_bar_done}{' ' * (percentage_bar_max_length - percentage_bar_done)}| Average Error: {average_error} | ETA: {round(min_left)}m {math.floor(sec_left)}s", end="", flush=True)
+                print(f"\r|{'#' * percentage_bar_done}{' ' * (percentage_bar_max_length - percentage_bar_done)}| Average Error: {average_error} | Min/Max: {min_error}/{max_error} | ETA: {round(min_left)}m {math.floor(sec_left)}s", end="", flush=True)
 
     def save(self, path):
         file = file_api.File(path)

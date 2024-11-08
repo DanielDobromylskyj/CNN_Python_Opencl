@@ -32,16 +32,16 @@ for segment in unprocessedTrainingData:
 
 
 if __name__ == "__main__":
-    net = Network((
-        layers.ConvolutedLayer((100, 100), (5, 5), filter_count=3, colour_depth=3),
-        layers.FullyConnectedLayer(400 * 3, 2, activations.Sigmoid)
-    ))
+    #net = Network((
+    #    layers.ConvolutedLayer((100, 100), (5, 5), filter_count=3, colour_depth=3),
+    #    layers.FullyConnectedLayer(400 * 3, 2, activations.Sigmoid)
+    #))
 
     #net.save("start.pyn")
-    net = Network.load("start.pyn")
+    net = Network.load("training.pyn")
 
     l_rate = 0.1
 
-    net.train([trainingData[0]], [trainingData[0]], 500, l_rate)
+    net.train(trainingData[:15], trainingData[15:], 200, l_rate)
 
     net.save("training.pyn")

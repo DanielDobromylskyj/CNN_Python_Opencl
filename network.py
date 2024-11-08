@@ -242,7 +242,8 @@ if __name__ == "__main__":
 
     net = Network((
         layers.ConvolutedLayer((100, 100), (5, 5), filter_count=5, colour_depth=3),
-        layers.FullyConnectedLayer(20 * 20 * 5, 2, activations.Sigmoid)
+        layers.FullyConnectedLayer(20 * 20 * 5, 50, activations.ReLU),
+        layers.FullyConnectedLayer(50, 2, activations.Sigmoid)
     ))
 
     net.save("test.pyn")

@@ -14,9 +14,6 @@ queue = cl.CommandQueue(ctx)
 mf = cl.mem_flags
 
 
-# Todo - Make Sigmoid activation weight distribution and implement it into making a full pop layer
-
-
 def load_core(core_element):
     with open(f"./core/{core_element}.txt", "r") as f:
         return cl.Program(ctx, f.read()).build()
@@ -160,7 +157,6 @@ class ConvolutedLayer(Layer):
                                   np.int32(self.get_output_shape()[0])).wait()
 
         return output
-
     def forward(self, inputs: NetworkBuffer, save_layer_data=False) -> tuple[Any] | tuple[tuple[Any], None]:
         data = BufferList(tuple(
             self._forward(filter_index, inputs) for filter_index in range(self.__filter_count)

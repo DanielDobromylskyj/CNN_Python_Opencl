@@ -35,7 +35,6 @@ __kernel void reduce_outputs(__global float* unreduced_outputs,
     float local_sum = 0.0; // the indexing here I think is wrong
     for (int input_index = 0; input_index < input_size; input_index++) {
         int array_index = output_index * input_size + input_index;
-
         local_sum += unreduced_outputs[array_index];
     }
 

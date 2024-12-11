@@ -20,7 +20,7 @@ __kernel void filter(__global float *input_error, __global float *weights, __glo
     int x_index = x * filter_width;
     int y_index = y * filter_height;
 
-    float output_error_value = -output_error[0];
+    float output_error_value = -output_error[0]; // negative ??? index 0 ???
     for (int dx = 0; dx < filter_width; dx++) {
        for (int dy = 0; dy < filter_height; dy++) {
             int input_index = ((y_index + dy) * input_width) + (x_index + dx);
@@ -30,6 +30,9 @@ __kernel void filter(__global float *input_error, __global float *weights, __glo
             weight_nudges[input_index] = weight_error;
 
             float error = output_error_value * weights[input_index];
+
+            //printf("%f %f", output_error_value, weights[input_index]);
+
             input_error[input_index] = error;
        }
     }

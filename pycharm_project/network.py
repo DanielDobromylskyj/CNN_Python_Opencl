@@ -216,6 +216,31 @@ class Network:
             file.segments[f"layer_{layer_id}"] = layer_codes[layer] + layer.serialize()
         file.write()
 
+    def debug_dump(self):
+        print(">>> NETWORK DUMP <<<")
+
+        for i, layer in enumerate(self.layout):
+            net_type = "Feature Map" if hasattr(layer, "get_true_kernel_shape") else "Fully Populated"
+            print(f"\n> Layer {i} ({net_type})")
+
+            if net_type == "Feature Map":
+                print(f"Input Shape (Internal): {layer.get_true_input_shape()}")
+                print(f"Output Shape (Per Kernel): {layer.get_output_shape()}")
+
+            print(f"Nodes In: {layer.get_total_nodes_in()}")
+            print(f"Nodes Out: {layer.get_total_nodes_out()}")
+
+            print("Data:")
+
+            if net_type == "Feature Map":
+                print("> Weights:")
+                for weight in layer.weights:
+                    print(f">> {weight.get_as_array()}")
+
+            if net_type == "Fully Populated":
+                print("> Weights:")
+                print(f">> {layer.weights.get_as_array()}")
+
     @staticmethod
     def load(path):
         file = file_api.File(path)
@@ -252,11 +277,39 @@ if __name__ == "__main__":
 
     print("made network")
 
-    rand_data = np.random.randn(30_000).astype(np.float32)
+    rand_data = np.random.randn(30_000).astype(dtype=np.float32) / 30_000
+    training_data = [
+        [np.full((30_000,), 0, dtype=np.float32), np.array([0, 1])],
+        [np.full((30_000,), 0.5, dtype=np.float32), np.array([0.5, 0.5])],
+        [np.full((30_000,), 1, dtype=np.float32), np.array([1, 0])],
+
+        [np.full((30_000,), 0.25, dtype=np.float32), np.array([0.25, 0.75])],
+        [np.full((30_000,), 0.75, dtype=np.float32), np.array([0.75, 0.25])],
+    ]
+
     v = viewer.viewer()
 
-    l_rate = 0.001
-    train_data = [(rand_data, np.array([0, 1])), (rand_data, np.array([0, 1]))]
-    test_data = [(rand_data, np.array([0, 1]))]
+    for i in range(100):
+        net = Network((
+            layers.ConvolutedLayer((100, 100), (5, 5), filter_count=5, colour_depth=3),
+            layers.FullyConnectedLayer(20 * 20 * 5, 50, activations.ReLU),
+            layers.FullyConnectedLayer(50, 2, activations.ReLU)
+        ))
 
-    net.train(train_data, test_data, 50, l_rate)
+        try:
+            net.train(training_data, training_data, 10, 0.05)
+        except ValueError:
+            net.debug_dump()
+            raise
+
+        outputs = net.forward_pass(rand_data)
+
+        if np.any(np.isnan(outputs) | np.isinf(outputs)):
+            print("NaN or Inf Found In Data (NaN, Inf): " + str(
+                np.any(np.isnan(outputs))) + ", " + str(
+                np.any(np.isinf(outputs))))
+
+            # Dump network
+            net.debug_dump()
+
+            break

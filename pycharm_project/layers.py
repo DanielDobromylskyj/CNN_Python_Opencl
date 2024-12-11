@@ -1,6 +1,5 @@
 from __future__ import annotations
-
-from typing import List, Any
+from typing import List, Any, Tuple
 
 import pyopencl as cl
 import numpy as np
@@ -8,6 +7,7 @@ import math
 import base64
 
 from buffers import *
+from buffers import BufferList
 
 ctx = cl.create_some_context()
 queue = cl.CommandQueue(ctx)
@@ -28,11 +28,19 @@ def mul(sizes):
 
 
 def relu_weight_init(size, fan_in, dtype=np.float32):
-    return np.random.randn(mul(size)).astype(dtype=dtype) * np.sqrt(2.0 / fan_in)
+    assert fan_in > 0, "fan_in must be a positive number"
+
+    random_values = np.random.randn(mul(size))
+    random_values = np.clip(random_values, -10, 10)
+    return random_values.astype(dtype) * np.sqrt(2.0 / fan_in)
 
 
 def sigmoid_weight_init(size, fan_in, dtype=np.float32):
-    return np.random.randn(np.prod(size)).astype(dtype) * np.sqrt(1.0 / fan_in)
+    assert fan_in > 0, "fan_in must be a positive number"
+
+    random_values = np.random.randn(np.prod(size))
+    random_values = np.clip(random_values, -10, 10)
+    return random_values.astype(dtype) * np.sqrt(2.0 / fan_in)
 
 
 class LayerCodes:
@@ -82,7 +90,7 @@ class Layer:
 
 class ConvolutedLayer(Layer):
     def __init__(self, input_size: tuple[int, int], kernel_size: tuple[int, int], filter_count: int,
-                 colour_depth: int = 1, loading: bool = False):  # todo - allow for sigmoid / other activations
+                 colour_depth: int = 1, loading: bool = False, testing=None):  # todo - allow for sigmoid / other activations
         self.__filter_count = filter_count
         self.__input_size = input_size
         self.__kernel_size = kernel_size
@@ -91,14 +99,18 @@ class ConvolutedLayer(Layer):
         self.forward_core = load_core("kernel")
 
         # Don't spend computing power generating weights to just overwrite them when loading.
+        # todo - clean up this init data ffs its a mess
         self.weights = [
-            NetworkBuffer(relu_weight_init((self.get_weight_count(),), self.get_weight_count()),
+            NetworkBuffer(relu_weight_init((self.get_weight_count(),), self.get_weight_count()) if not testing else
+                                    np.full(self.get_weight_count(), testing[0], dtype=np.float32),
                           self.get_weight_count())
             for i in range(self.__filter_count)
         ] if loading is False else None
 
         self.biases = [
-            NetworkBuffer(np.zeros((1,), dtype=np.float32), self.get_bias_count()) if loading is False else None
+            NetworkBuffer(
+                np.zeros((1,), dtype=np.float32) if not testing else np.full(self.get_bias_count(), testing[1], dtype=np.float32),
+                self.get_bias_count()) if loading is False else None
             for i in range(self.__filter_count)
         ] if loading is False else None
 
@@ -119,7 +131,7 @@ class ConvolutedLayer(Layer):
 
     def get_output_size(self) -> int:
         output_shape = self.get_output_shape()
-        return output_shape[0] * output_shape[1]
+        return int(output_shape[0] * output_shape[1])
 
     def get_input_size(self) -> int:
         input_shape = self.get_true_input_shape()
@@ -157,7 +169,8 @@ class ConvolutedLayer(Layer):
                                   np.int32(self.get_output_shape()[0])).wait()
 
         return output
-    def forward(self, inputs: NetworkBuffer, save_layer_data=False) -> tuple[Any] | tuple[tuple[Any], None]:
+
+    def forward(self, inputs: NetworkBuffer, save_layer_data=False) -> tuple[BufferList, None] | BufferList:
         data = BufferList(tuple(
             self._forward(filter_index, inputs) for filter_index in range(self.__filter_count)
         ))
@@ -169,6 +182,7 @@ class ConvolutedLayer(Layer):
     def _backward(self, core, filter_index, inputs: NetworkBuffer, outputs_activated: NetworkBuffer,
                   outputs_unactivated: NetworkBuffer, output_error_gradients: Gradients,
                   learning_rate: float) -> tuple[Gradients, Gradients, Gradients]:
+
         input_gradients = Gradients(np.zeros(self.get_input_size(), dtype=np.float32))
         weight_gradients_unreduced = Gradients(np.zeros(self.get_input_size(), dtype=np.float32))
         weight_gradients = Gradients(np.zeros(self.get_weight_count(), dtype=np.float32))
@@ -260,7 +274,6 @@ class ConvolutedLayer(Layer):
             ) for bias in self.biases
         ]) + f"..{self.__filter_count}..{self.__input_size}..{self.__kernel_size}..{self.__colour_depth}".encode()
 
-
     @staticmethod
     def deserialize(data):
         weights, biases, filter_count, input_size, kernel_size, colour_depth = data.split(b"..")
@@ -289,18 +302,21 @@ class ConvolutedLayer(Layer):
 
 
 class FullyConnectedLayer(Layer):
-    def __init__(self, input_size: int, output_size: int, activation: int, loading: bool = False):
+    def __init__(self, input_size: int, output_size: int, activation: int, loading: bool = False, testing=None):
         self.__input_size = input_size
         self.__output_size = output_size
         self.__activation = activation
 
         self.weights = NetworkBuffer(
-            relu_weight_init((input_size, output_size), input_size) if activation == 1 else
-            sigmoid_weight_init((input_size, output_size), input_size),
+            (
+                relu_weight_init((input_size, output_size), input_size) if activation == 1 else
+                sigmoid_weight_init((input_size, output_size), input_size)
+            ) if not testing else np.full((input_size * output_size,), testing[0], dtype=np.float32),
             self.get_weight_count()) if loading is False else None
 
         self.biases = NetworkBuffer(
-            np.zeros(self.get_bias_count()), self.get_bias_count()
+            np.zeros(self.get_bias_count()) if not testing else np.full(self.get_bias_count(), testing[1], dtype=np.float32),
+            self.get_bias_count()
         ) if loading is False else None
 
         self.forward_core = load_core("full_pop")
@@ -365,7 +381,7 @@ class FullyConnectedLayer(Layer):
                        self.biases.get_as_buffer(), output_error_gradients.get_as_buffer(),
                        input_gradients_unreduced.get_as_buffer(), weight_gradients.get_as_buffer(),
                        bias_gradients_unreduced.get_as_buffer(), np.int32(self.get_input_size()),
-                       np.int32(self.__activation), np.float32(learning_rate)
+                       np.int32(self.get_output_size()), np.int32(self.__activation), np.float32(learning_rate)
                        ).wait()
 
         # Step 2/3 - Reduce Input Gradients
@@ -396,10 +412,12 @@ class FullyConnectedLayer(Layer):
         self.weights += weight_gradients / count
         self.biases += bias_gradients / count
 
+        print(sum(bias_gradients.get_as_array()))
+        print(sum(weight_gradients.get_as_array()))
+
     def serialize(self):
         return base64.b64encode(self.weights.get_as_array().tobytes()) + b".." + base64.b64encode(
             self.biases.get_as_array().tobytes()) + f"..{self.__input_size}..{self.__output_size}..{self.__activation}".encode()
-
 
     @staticmethod
     def deserialize(data):

@@ -25,7 +25,7 @@ __kernel void backwards(
         __global float* input_error_gradients_unreduced,
         __global float* weight_gradients,
         __global float* bias_gradients_unreduced,
-        int input_size, int activation_type,
+        int input_size, int output_size, int activation_type,
         float learning_rate
 ) {
     int input_index = get_global_id(0);
@@ -72,6 +72,10 @@ __kernel void reduce_input_error_gradients(
     for (int output_index = 0; output_index < output_size;output_index++) {
         int pre_summed_index = output_index * input_size + input_index;
 
+        if (isnan(pre_summed[pre_summed_index])) {
+            printf("Found NaN While summing. Index: %d. Input Index: %d", pre_summed_index, input_index);
+        }
+
         float value = pre_summed[pre_summed_index];
         local_sum += value;
     }
@@ -97,5 +101,5 @@ __kernel void reduce_bias_gradients(
     }
 
     // Fucked, returning NaN. So I just removed it
-    //summed[output_index] = local_sum;
+    summed[output_index] = 0; // local_sum
 }

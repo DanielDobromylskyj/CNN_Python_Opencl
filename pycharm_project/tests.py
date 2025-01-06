@@ -115,13 +115,13 @@ def test_output_validity_basic():
     outputs = test_net_1.forward_pass([1, 2, 3, 4, 5])
     expected = np.array([0.952574, 0.952574], dtype=np.float32)
     if np.allclose(expected, outputs, atol=1e-6):
-        print(f"\rTest Net  {test_number} | PASSED")
+        print(f"\rTest Net  {test_number} | PASSED", end="")
     else:
         print(f"\rTest Net  {test_number} | FAILED | Output: {outputs}, Expected: {expected}")
 
     # TEST NETWORK 2
     test_number = 2
-    print(f"Test Net  {test_number} | TESTING", end="")
+    print(f"\rTest Net  {test_number} | TESTING", end="")
     test_net_2 = network.Network((
         layers.FullyConnectedLayer(1, 2, activations.Sigmoid,
                                    testing=[1, 0]),
@@ -133,13 +133,13 @@ def test_output_validity_basic():
     outputs = test_net_2.forward_pass([1])
     expected = np.array([1.4621172], dtype=np.float32)
     if np.allclose(expected, outputs, atol=1e-6):
-        print(f"\rTest Net  {test_number} | PASSED")
+        print(f"\rTest Net  {test_number} | PASSED", end="")
     else:
         print(f"\rTest Net  {test_number} | FAILED | Output: {outputs}, Expected: {expected}")
 
     # TEST NETWORK 3
     test_number = 3
-    print(f"Test Net  {test_number} | TESTING", end="")
+    print(f"\rTest Net  {test_number} | TESTING", end="")
     test_net_3 = network.Network((
         layers.FullyConnectedLayer(1, 2, activations.Sigmoid,
                                    testing=[1, 0]),
@@ -151,14 +151,14 @@ def test_output_validity_basic():
     outputs = test_net_3.forward_pass([5.3])
     expected = np.array([1.9900664], dtype=np.float32)
     if np.allclose(expected, outputs, atol=1e-6):
-        print(f"\rTest Net  {test_number} | PASSED")
+        print(f"\rTest Net  {test_number} | PASSED", end="")
     else:
         print(f"\rTest Net  {test_number} | FAILED | Output: {outputs}, Expected: {expected}")
 
 
     # TEST NETWORK 4
     test_number = 4
-    print(f"Test Net  {test_number} | TESTING", end="")
+    print(f"\rTest Net  {test_number} | TESTING", end="")
     test_net_4 = network.Network((
         layers.FullyConnectedLayer(1, 2, activations.Sigmoid,
                                    testing=[1, 0]),
@@ -170,13 +170,13 @@ def test_output_validity_basic():
     outputs = test_net_4.forward_pass([-2])
     expected = np.array([0.2384058], dtype=np.float32)
     if np.allclose(expected, outputs, atol=1e-6):
-        print(f"\rTest Net  {test_number} | PASSED")
+        print(f"\rTest Net  {test_number} | PASSED", end="")
     else:
         print(f"\rTest Net  {test_number} | FAILED | Output: {outputs}, Expected: {expected}")
 
     # TEST NETWORK 5
     test_number = 5
-    print(f"Test Net  {test_number} | TESTING", end="")
+    print(f"\rTest Net  {test_number} | TESTING", end="")
     test_net_5 = network.Network((
         layers.FullyConnectedLayer(1, 2, activations.Sigmoid,
                                    testing=[1, 1]),
@@ -188,7 +188,7 @@ def test_output_validity_basic():
     outputs = test_net_5.forward_pass([1.234])
     expected = np.array([2.8065228], dtype=np.float32)
     if np.allclose(expected, outputs, atol=1e-6):
-        print(f"\rTest Net  {test_number} | PASSED")
+        print(f"\rTest Net  {test_number} | PASSED", end="")
     else:
         print(f"\rTest Net  {test_number} | FAILED | Output: {outputs}, Expected: {expected}")
 
@@ -196,7 +196,7 @@ def test_output_validity_basic():
 
     # TEST NETWORK 6
     test_number = 6
-    print(f"Test Net  {test_number} | TESTING", end="")
+    print(f"\rTest Net  {test_number} | TESTING", end="")
     test_net_6 = network.Network((
         layers.ConvolutedLayer((4, 4), (2, 2), 1, testing=[1, 0]),
     ))
@@ -210,13 +210,13 @@ def test_output_validity_basic():
 
     expected = np.array([4, 4, 4, 4], dtype=np.float32)
     if np.allclose(expected, outputs, atol=1e-6):
-        print(f"\rTest Net  {test_number} | PASSED")
+        print(f"\rTest Net  {test_number} | PASSED", end="")
     else:
         print(f"\rTest Net  {test_number} | FAILED | Output: {outputs}, Expected: {expected}")
 
     # TEST NETWORK 7
     test_number = 7
-    print(f"Test Net  {test_number} | TESTING", end="")
+    print(f"\rTest Net  {test_number} | TESTING", end="")
     test_net_7 = network.Network((
         layers.ConvolutedLayer((4, 4), (2, 2), 1, testing=[1, 0]),
     ))
@@ -230,13 +230,13 @@ def test_output_validity_basic():
 
     expected = np.array([10, 10, 10, 10], dtype=np.float32)
     if np.allclose(expected, outputs, atol=1e-6):
-        print(f"\rTest Net  {test_number} | PASSED")
+        print(f"\rTest Net  {test_number} | PASSED", end="")
     else:
         print(f"\rTest Net  {test_number} | FAILED | Output: {outputs}, Expected: {expected}")
 
     # TEST NETWORK 8
     test_number = 8
-    print(f"Test Net  {test_number} | TESTING", end="")
+    print(f"\rTest Net  {test_number} | TESTING", end="")
     test_net_8 = network.Network((
         layers.ConvolutedLayer((8, 8), (2, 2), 1, testing=[1, 0]),
         layers.ConvolutedLayer((4, 4), (2, 2), 1, testing=[1, 0])
@@ -256,13 +256,13 @@ def test_output_validity_basic():
     expected = np.array([40, 40, 40, 40], dtype=np.float32)
 
     if np.allclose(expected, outputs, atol=1e-6):
-        print(f"\rTest Net  {test_number} | PASSED")
+        print(f"\rTest Net  {test_number} | PASSED", end="")
     else:
         print(f"\rTest Net  {test_number} | FAILED | Output: {outputs}, Expected: {expected}")
 
     # TEST NETWORK 9
     test_number = 9
-    print(f"Test Net  {test_number} | TESTING", end="")
+    print(f"\rTest Net  {test_number} | TESTING", end="")
     test_net_9 = network.Network((
         layers.ConvolutedLayer((8, 8), (2, 2), 1, testing=[1, 0]),
         layers.FullyConnectedLayer(16, 2, activations.ReLU, testing=[0.5, 1])
@@ -282,13 +282,13 @@ def test_output_validity_basic():
     expected = np.array([81, 81], dtype=np.float32)
 
     if np.allclose(expected, outputs, atol=1e-6):
-        print(f"\rTest Net  {test_number} | PASSED")
+        print(f"\rTest Net  {test_number} | PASSED", end="")
     else:
         print(f"\rTest Net  {test_number} | FAILED | Output: {outputs}, Expected: {expected}")
 
     # TEST NETWORK 10
     test_number = 10
-    print(f"Test Net {test_number} | TESTING", end="")
+    print(f"\rTest Net {test_number} | TESTING", end="")
     test_net_10 = network.Network((
         layers.ConvolutedLayer((8, 8), (2, 2), 1, testing=[1, 0]),
         layers.FullyConnectedLayer(16, 36, activations.ReLU, testing=[0.5, 1]),
@@ -309,11 +309,11 @@ def test_output_validity_basic():
     expected = np.array([326, 326, 326, 326, 326, 326, 326, 326, 326], dtype=np.float32)
 
     if np.allclose(expected, outputs, atol=1e-6):
-        print(f"\rTest Net {test_number} | PASSED")
+        print(f"\rTest Net {test_number} | PASSED", end="")
     else:
         print(f"\rTest Net {test_number} | FAILED | Output: {outputs}, Expected: {expected}")
 
-    print("\n")
+    print("\rNet Testing Complete. Failures listed above.\n")
 
 def test_output_validity_advanced():
     print("> VALIDATION TEST ADVANCED <")
@@ -365,6 +365,60 @@ def test_output_validity_advanced():
 
     print("\n")
 
+def test_output_validity_backpropagation():
+    print("> VALIDATION TEST BACKPROPAGATION <")
+
+    # TEST NETWORK 1
+    test_number = 1
+    print(f"Test Net  {test_number} | TESTING", end="")
+
+    test_net = network.Network((
+        layers.FullyConnectedLayer(2, 3, activations.ReLU, loading=True),
+        layers.FullyConnectedLayer(3, 2, activations.ReLU, loading=True)
+    ))
+
+    test_net.layout[0].weights = buffers.NetworkBuffer(np.array([0, 0, 2, 2, 1, 4], dtype=np.float32), (6,))
+    test_net.layout[0].biases = buffers.NetworkBuffer(np.array([0, 2, -5], dtype=np.float32), (3,))
+
+    test_net.layout[1].weights = buffers.NetworkBuffer(np.array([0, 0, 2, 0, 3, 0], dtype=np.float32), (6,))
+    test_net.layout[1].biases = buffers.NetworkBuffer(np.array([-1, 1], dtype=np.float32), (2,))
+
+    sample = np.array([1, 0.5])
+    target = np.asarray([0.5, 1])
+    learning_rate = 0
+
+    gradients = test_net.backward_pass(sample, target, learning_rate)
+
+    total = 0
+    for layer in gradients:
+        total += sum(layer[0].get_as_array())
+        total += sum(layer[1].get_as_array())
+
+    if total == 0:
+        print(f"\rTest Net  {test_number} | PASSED")
+    else:
+        print(f"\rTest Net  {test_number} | FAILED | Total: {total}, Expected: 0")
+
+    test_number = 2
+    print(f"Test Net  {test_number} | TESTING", end="")
+
+    sample = np.array([1, 0.5])
+    target = np.asarray([0.5, 1])
+    learning_rate = 0.1
+
+    gradients = test_net.backward_pass(sample, target, learning_rate)
+
+    total = 0
+    for layer in gradients:
+        total += sum(layer[0].get_as_array())
+        total += sum(layer[1].get_as_array())
+
+    if total == 0:
+        print(f"\rTest Net  {test_number} | PASSED")
+    else:
+        print(f"\rTest Net  {test_number} | FAILED | Total: {total}, Expected: 0")
+
+
 
 if __name__ == "__main__":
     test_net = network.Network((
@@ -374,7 +428,8 @@ if __name__ == "__main__":
 
     #test_net = network.Load("net.pyn")
 
-    test_performance(test_net)
-    test_output_validity_basic()
-    test_output_validity_advanced()
-    test_accuracy(test_net)
+    #test_performance(test_net)
+    #test_output_validity_basic()
+    #test_output_validity_advanced()
+    test_output_validity_backpropagation()
+    #test_accuracy(test_net)

@@ -14,50 +14,80 @@ inline float clip(float value, float clip_value) {
     return fmin(fmax(value, -clip_value), clip_value);
 }
 
-
+// REMEMBER THAT WE ARE WORKING BACKWARDS. SO OUR "inputs" ARE THE RIGHT SIDE NODES OF A LAYER
 __kernel void backwards(
-        __global float* inputs,
-        __global float* outputs_activated,
-        __global float* outputs_unactivated,
+        __global float* left_hand_nodes,
+        __global float* right_hand_nodes_activated,
+        __global float* right_hand_nodes_unactivated,
         __global float* weights,
         __global float* biases,
-        __global float* output_error_gradients,
-        __global float* input_error_gradients_unreduced,
+        __global float* right_hand_nodes_error_gradients, // left_hand_nodes_error_gradients_unreduced
+        __global float* left_hand_nodes_error_gradients_unreduced, // Same size as the weights, so we can "reduce" it later for our final output
         __global float* weight_gradients,
         __global float* bias_gradients_unreduced,
-        int input_size, int output_size, int activation_type,
+        int right_hand_nodes_size, int left_hand_nodes_size, int activation_type,
         float learning_rate
 ) {
-    int input_index = get_global_id(0);
-    int output_index = get_global_id(1);
+    //int input_index = get_global_id(0);
+    //int output_index = get_global_id(1);
 
     // Get the unactivated and activated output values
-    float activated_value = outputs_activated[output_index];
-    float unactivated_value = outputs_unactivated[output_index];
+    //float activated_value = outputs_activated[output_index];
+    //float unactivated_value = outputs_unactivated[output_index];
 
     // Compute the derivative of the activation function
+    //float derivative = 1.0f;
+    //switch (activation_type) {
+    //    case 1: // ReLU activation
+    //        derivative = unactivated_value > 0 ? 1.0f : 0.0f;
+    //        break;
+    //    case 2: // Sigmoid activation
+    //      derivative = activated_value * (1.0f - activated_value);
+    //       break;
+    //    default:
+    //        derivative = 1.0f; // Linear activation (default)
+    //}
+
+    //float delta = -output_error_gradients[output_index] * derivative;
+
+    //float weight_gradient = delta * outputs[output_index] * learning_rate;
+
+    // Index calculation  - reverse output/input as ours are relative to backprop
+    //int weight_index = output_index * input_size + input_index;
+
+    // Update gradients
+    //weight_gradients[weight_index] = clip(weight_gradient, 0.5f);
+    //bias_gradients_unreduced[output_index] = delta * learning_rate;
+    //input_error_gradients_unreduced[weight_index] = clip(weights[weight_index] * delta, 0.5f);
+
+    int left_hand_index = get_global_id(0);
+    int right_hand_index = get_global_id(1);
+
+    float activated_value = right_hand_nodes_activated[right_hand_index];
+    float unactivated_value = right_hand_nodes_activated[right_hand_index];
+
     float derivative = 1.0f;
     switch (activation_type) {
         case 1: // ReLU activation
             derivative = unactivated_value > 0 ? 1.0f : 0.0f;
             break;
         case 2: // Sigmoid activation
-            derivative = activated_value * (1.0f - activated_value);
-            break;
+          derivative = activated_value * (1.0f - activated_value);
+           break;
         default:
             derivative = 1.0f; // Linear activation (default)
+            break;
     }
 
-    float delta = -output_error_gradients[output_index] * derivative;
-    float weight_gradient = delta * inputs[input_index] * learning_rate;
+    float delta = right_hand_nodes_error_gradients[right_hand_index] * derivative;
+    float weight_gradient = delta * left_hand_nodes[left_hand_index] * learning_rate;
 
-    // Index calculation
-    int weight_index = output_index * input_size + input_index;
+    int weight_index = left_hand_index * left_hand_nodes_size + right_hand_index;
 
-    // Update gradients
-    weight_gradients[weight_index] = clip(weight_gradient, 0.5f);
-    bias_gradients_unreduced[output_index] = delta * learning_rate;
-    input_error_gradients_unreduced[weight_index] = clip(weights[weight_index] * delta, 0.5f);
+    weight_gradients[weight_index] = clip(weight_gradient, 1.0f);
+    bias_gradients_unreduced[right_hand_index] = delta * learning_rate;
+    left_hand_nodes_error_gradients_unreduced[weight_index] = clip(weights[weight_index] * delta, 0.5f);
+
 }
 
 __kernel void reduce_input_error_gradients(
@@ -100,6 +130,6 @@ __kernel void reduce_bias_gradients(
         local_sum += value;
     }
 
-    // Fucked, returning NaN. So I just removed it
-    summed[output_index] = 0; // local_sum
+    // Fucked, returning NaN. So I just removed it - seems to work again?
+    summed[output_index] = local_sum;
 }

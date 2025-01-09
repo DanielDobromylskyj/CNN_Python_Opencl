@@ -102,7 +102,7 @@ class Network:
 
         error = target - outputs
 
-        output_error_gradients = self.__convert_to_gradients(error)
+        output_error_gradients = self.__convert_to_gradients(error.astype(np.float32))
 
         gradient_data = [[None, None] for j in range(len(self.layout))]
 

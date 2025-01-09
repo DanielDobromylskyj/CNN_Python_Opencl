@@ -108,7 +108,7 @@ class BufferList:
 
 class Gradients:
     def __init__(self, gradients: np.ndarray):
-        self.__gradients = cl.Buffer(ctx, mf.READ_WRITE | mf.USE_HOST_PTR, gradients.nbytes, hostbuf=gradients)
+        self.__gradients = cl.Buffer(ctx, mf.READ_WRITE | mf.USE_HOST_PTR, hostbuf=gradients.astype(np.float32))
         self.__shape = gradients.shape
 
     def get_shape(self):

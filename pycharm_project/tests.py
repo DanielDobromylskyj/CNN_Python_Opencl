@@ -365,6 +365,7 @@ def test_output_validity_advanced():
 
     print("\n")
 
+
 def test_output_validity_backpropagation():
     print("> VALIDATION TEST BACKPROPAGATION <")
 
@@ -408,16 +409,19 @@ def test_output_validity_backpropagation():
 
     gradients = test_net.backward_pass(sample, target, learning_rate)
 
-    total = 0
-    for layer in gradients:
-        total += sum(layer[0].get_as_array())
-        total += sum(layer[1].get_as_array())
+    target_gradients = [0, 0, 0.25, -7.5, 0, 0]
 
-    if total == 0:
+    failed = False
+    fail_data = ""
+    for i, gradient in enumerate(gradients[1][0].get_as_array()):
+        if gradient != target_gradients[i]:
+            failed = True
+            fail_data += f"[I: {i}, T: {target_gradients[i]}, C: {gradient}] "
+
+    if not failed:
         print(f"\rTest Net  {test_number} | PASSED")
     else:
-        print(f"\rTest Net  {test_number} | FAILED | Total: {total}, Expected: 0")
-
+        print(f"\rTest Net  {test_number} | FAILED | {fail_data}")
 
 
 if __name__ == "__main__":
@@ -428,8 +432,8 @@ if __name__ == "__main__":
 
     #test_net = network.Load("net.pyn")
 
-    #test_performance(test_net)
+    test_performance(test_net)
     #test_output_validity_basic()
     #test_output_validity_advanced()
-    test_output_validity_backpropagation()
+    #test_output_validity_backpropagation()
     #test_accuracy(test_net)

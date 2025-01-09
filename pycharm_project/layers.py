@@ -368,11 +368,11 @@ class FullyConnectedLayer(Layer):
         core = load_core("training/full_pop")
 
         # Create Gradients
-        weight_gradients = Gradients(np.empty(self.get_weight_count(), dtype=np.float32))
-        bias_gradients_unreduced = Gradients(np.empty(self.get_weight_count(), dtype=np.float32))
-        bias_gradients = Gradients(np.empty(self.get_bias_count(), dtype=np.float32))
-        input_gradients_unreduced = Gradients(np.empty(self.get_weight_count(), dtype=np.float32))
-        input_gradients = Gradients(np.empty(self.get_input_size(), dtype=np.float32))
+        weight_gradients = Gradients(np.zeros(self.get_weight_count(), dtype=np.float32))
+        bias_gradients_unreduced = Gradients(np.zeros(self.get_weight_count(), dtype=np.float32))
+        bias_gradients = Gradients(np.zeros(self.get_bias_count(), dtype=np.float32))
+        input_gradients_unreduced = Gradients(np.zeros(self.get_weight_count(), dtype=np.float32))
+        input_gradients = Gradients(np.zeros(self.get_input_size(), dtype=np.float32))
 
         # Step 1/3 - Perform calculations
         core.backwards(queue, (self.get_input_size(), self.get_output_size()), None,
@@ -408,12 +408,9 @@ class FullyConnectedLayer(Layer):
 
         return input_gradients, weight_gradients, bias_gradients
 
-    def apply_gradients(self, weight_gradients: Gradients, bias_gradients: Gradients, count: int) -> None:
+    def apply_gradients(self, weight_gradients: Gradients, bias_gradients: Gradients, count: int) -> None:  # todo - Implement ADAM
         self.weights += weight_gradients / count
         self.biases += bias_gradients / count
-
-        print(sum(bias_gradients.get_as_array()))
-        print(sum(weight_gradients.get_as_array()))
 
     def serialize(self):
         return base64.b64encode(self.weights.get_as_array().tobytes()) + b".." + base64.b64encode(

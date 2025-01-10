@@ -377,7 +377,7 @@ def perform_tests():
 
             (test_backprop_efficiency, (
                 [
-                    ("full", (1, 2, activations.Sigmoid)),
+                    ("full", (1, 2, activations.ReLU)),
                 ],
 
                 [
@@ -387,32 +387,27 @@ def perform_tests():
                     ]
                 ],
 
-                [[[1], [1, 1]], [[0.5], [1, 0.5]], [[0], [1, 0]]],
-                40,
-                0.01,  # learning rate
+                [[[1], [1, 1]], [[0.5], [1, 0.5]], [[0], [1, 0]], [[3], [1, 3]], [[5], [1, 5]]],
+                65,
+                0.02,  # learning rate
                 .3
             )),
 
             (test_backprop_efficiency, (
                 [
-                    ("full", (2, 3, activations.ReLU)),
-                    ("full", (3, 2, activations.ReLU)),
+                    ("full", (2, 2, activations.ReLU, False, None, [0.9, 0.999])),
                 ],
 
                 [
                     [
-                        buffers.NetworkBuffer(np.array([1, 1, 2, 2, 1, 4], dtype=np.float32), (6,)),
-                        buffers.NetworkBuffer(np.array([1, 2, -5], dtype=np.float32), (3,))
-                    ],
-                    [
-                        buffers.NetworkBuffer(np.array([1, 1, 2, 1, 3, 1], dtype=np.float32), (6,)),
-                        buffers.NetworkBuffer(np.array([-1, 1], dtype=np.float32), (2,))
-                    ],
+                        buffers.NetworkBuffer(np.array([1, 1, 1, 1], dtype=np.float32), (4,)),
+                        buffers.NetworkBuffer(np.array([0, 0], dtype=np.float32), (2,))
+                    ]
                 ],
 
                 [[[1, 1], [2, 3]], [[2, 1], [4, 3]], [[3, 3], [6, 9]]],
-                40,
-                0.01,  # learning rate
+                200,
+                0.05,  # learning rate
                 2.0
             )),
         ],
@@ -443,22 +438,16 @@ def perform_tests():
     max_label_width = max(max([len(sub_category) for sub_category in tests]), 8) + 1
 
     spacing = ' '
-    header = f"Category{spacing * (max_label_width - 8)}| {' | '.join([f'Test {i + 1}{spacing * (len(str(max_results)) - len(str(i + 1)))}' for i in range(max_results)])} |"
-    print(header)
-    print(
-        f"{'-' * max_label_width}+-{'-+-'.join(['-----' + ('-' * len(str(max_results))) for i in range(max_results)])}-+")
+    print(f"Category{spacing * (max_label_width - 8)}| {' | '.join([f'Test {i + 1}{spacing * (len(str(max_results)) - len(str(i + 1)))}' for i in range(max_results)])} |")
+    print(f"{'-' * max_label_width}+-{'-+-'.join(['-----' + ('-' * len(str(max_results))) for i in range(max_results)])}-+")
     for sub_category in tests:
-        print(
-            f"{sub_category}{spacing * (max_label_width - len(sub_category))}| {' | '.join([(f' {bcolors.PASS}PASS{bcolors.ENDC}' if result[0] is True else f' {bcolors.FAIL}FAIL{bcolors.ENDC}') + ' ' * len(str(max_results)) for result in test_results[sub_category]])} |",
-            end="")
+        print(f"{sub_category}{spacing * (max_label_width - len(sub_category))}| {' | '.join([(f' {bcolors.PASS}PASS{bcolors.ENDC}' if result[0] is True else f' {bcolors.FAIL}FAIL{bcolors.ENDC}') + ' ' * len(str(max_results)) for result in test_results[sub_category]])} |", end="")
         if max_results - len(test_results[sub_category]) != 0:
-            print(" " + " | ".join([f" {bcolors.NO_TEST}None{bcolors.ENDC} " for i in
-                                    range(max_results - len(test_results[sub_category]))]) + " |")
+            print(" " + " | ".join([f" {bcolors.NO_TEST}None{bcolors.ENDC} " for i in range(max_results - len(test_results[sub_category]))]) + " |")
         else:
             print("")
 
-        print(
-            f"{'-' * max_label_width}+-{'-+-'.join(['-----' + ('-' * len(str(max_results))) for i in range(max_results)])}-+")
+        print(f"{'-' * max_label_width}+-{'-+-'.join(['-----' + ('-' * len(str(max_results))) for i in range(max_results)])}-+")
         
     print("\n")  # 2 new lines
 
@@ -466,7 +455,6 @@ def perform_tests():
 
     if all_failures:
         print(f"{bcolors.FAIL}>> Failure Debug Output <<{bcolors.ENDC}\n")
-        max_line_length = max([len(failure[2]) for failure in all_failures]) + 10
 
         for sub_category in tests:
             failures = [(i+1, result) for i, result in enumerate(test_results[sub_category]) if result[0] is False]

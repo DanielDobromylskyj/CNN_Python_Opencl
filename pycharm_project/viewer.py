@@ -11,8 +11,7 @@ class viewer:
         matplotlib.use('TkAgg')
 
     def display(self, network, inputs, target=None):
-        max_y = max(
-            [layer.get_filter_count() if isinstance(layer, layers.ConvolutedLayer) else 1 for layer in network.layout])
+        max_y = max([layer.get_filter_count() if isinstance(layer, layers.ConvolutedLayer) else 1 for layer in network.layout]) + 1
 
         if self.fig is None:
             self.fig, self.axes = plt.subplots(max_y, len(network.layout), figsize=(10, 10))

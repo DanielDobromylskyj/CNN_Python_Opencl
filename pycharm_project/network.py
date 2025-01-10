@@ -266,9 +266,7 @@ if __name__ == "__main__":
     import viewer
 
     net = Network((
-        layers.ConvolutedLayer((100, 100), (5, 5), filter_count=5, colour_depth=3),
-        layers.FullyConnectedLayer(20 * 20 * 5, 50, activations.ReLU),
-        layers.FullyConnectedLayer(50, 2, activations.Sigmoid)
+        layers.FullyConnectedLayer(1, 1, activations.ReLU, testing=[1, 0], ADAM_data=[0.9, 0.999]),
     ))
 
     net.save("test.pyn")
@@ -277,39 +275,20 @@ if __name__ == "__main__":
 
     print("made network")
 
-    rand_data = np.random.randn(30_000).astype(dtype=np.float32) / 30_000
     training_data = [
-        [np.full((30_000,), 0, dtype=np.float32), np.array([0, 1])],
-        [np.full((30_000,), 0.5, dtype=np.float32), np.array([0.5, 0.5])],
-        [np.full((30_000,), 1, dtype=np.float32), np.array([1, 0])],
-
-        [np.full((30_000,), 0.25, dtype=np.float32), np.array([0.25, 0.75])],
-        [np.full((30_000,), 0.75, dtype=np.float32), np.array([0.75, 0.25])],
+        [np.array([2]), np.array([4])],
+        [np.array([1]), np.array([2])],
+        [np.array([3]), np.array([6])],
+        [np.array([0]), np.array([0])],
     ]
 
     v = viewer.viewer()
 
-    for i in range(100):
-        net = Network((
-            layers.ConvolutedLayer((100, 100), (5, 5), filter_count=5, colour_depth=3),
-            layers.FullyConnectedLayer(20 * 20 * 5, 50, activations.ReLU),
-            layers.FullyConnectedLayer(50, 2, activations.ReLU)
-        ))
+    for i in range(50):
+        net.train(training_data, training_data, 200, 0.01)
+        print()
 
-        try:
-            net.train(training_data, training_data, 10, 0.05)
-        except ValueError:
-            net.debug_dump()
-            raise
+        for point in training_data:
+            print(point, net.forward_pass(point[0]))
 
-        outputs = net.forward_pass(rand_data)
-
-        if np.any(np.isnan(outputs) | np.isinf(outputs)):
-            print("NaN or Inf Found In Data (NaN, Inf): " + str(
-                np.any(np.isnan(outputs))) + ", " + str(
-                np.any(np.isinf(outputs))))
-
-            # Dump network
-            net.debug_dump()
-
-            break
+    input()

@@ -43,6 +43,41 @@ def sigmoid_weight_init(size, fan_in, dtype=np.float32):
     return random_values.astype(dtype) * np.sqrt(2.0 / fan_in)
 
 
+class ADAM:  # Adaptive Momentum Estimation
+    def __init__(self, shape, beta1=0.9, beta2=0.999):
+        self.beta_1 = beta1  # First moment decay
+        self.beta_2 = beta2  # Second moment decay
+        self.epsilon = 1e-7  # Small constant to avoid division by zero
+        self.time_step = 0
+
+        self.m = np.zeros(shape, dtype=np.float32)  # First moment (m_t)
+        self.v = np.zeros(shape, dtype=np.float32)  # Second moment (v_t)
+
+    def optimise(self, parameters, gradients):
+        gradients = gradients.get_as_array()
+
+        for param in range(len(parameters)):
+            g_t = gradients[param]  # Gradient for parameter at time t
+
+            # Update biased first moment estimate (m_t)
+            self.m[param] = self.beta_1 * self.m[param] + (1 - self.beta_1) * g_t
+
+            # Update biased second moment estimate (v_t)
+            self.v[param] = self.beta_2 * self.v[param] + (1 - self.beta_2) * (g_t ** 2)
+
+            # Compute bias-corrected estimates
+            m_hat = self.m[param] / (1 - self.beta_1 ** self.time_step)
+            v_hat = self.v[param] / (1 - self.beta_2 ** self.time_step)
+
+            # Update parameter using ADAM formula
+            parameters[param] += m_hat / (np.sqrt(v_hat) + self.epsilon)
+
+        return parameters
+
+    def step(self):
+        self.time_step += 1
+
+
 class LayerCodes:
     def __init__(self):
         self.__code_to_layer = {
@@ -256,7 +291,7 @@ class ConvolutedLayer(Layer):
             ) for filter_index in range(self.__filter_count)
         ))
 
-    def apply_gradients(self, weight_gradients: BufferList, bias_gradients: BufferList, count: int) -> None:
+    def apply_gradients(self, weight_gradients: BufferList, bias_gradients: BufferList, count: int) -> None:  # todo - add ADAM
         for filter_index, weight_gradient in enumerate(weight_gradients):
             self.weights[filter_index] += weight_gradient / count
 
@@ -302,7 +337,7 @@ class ConvolutedLayer(Layer):
 
 
 class FullyConnectedLayer(Layer):
-    def __init__(self, input_size: int, output_size: int, activation: int, loading: bool = False, testing=None):
+    def __init__(self, input_size: int, output_size: int, activation: int, loading: bool = False, testing=None, ADAM_data=None):
         self.__input_size = input_size
         self.__output_size = output_size
         self.__activation = activation
@@ -318,6 +353,14 @@ class FullyConnectedLayer(Layer):
             np.zeros(self.get_bias_count()) if not testing else np.full(self.get_bias_count(), testing[1], dtype=np.float32),
             self.get_bias_count()
         ) if loading is False else None
+
+        if ADAM_data:
+            beta1, beta2 = ADAM_data
+            self.optimisers_weights = ADAM(self.get_weight_count(), beta1, beta2)
+            self.optimisers_biases = ADAM(self.get_bias_count(), beta1, beta2)
+        else:
+            self.optimisers_weights = None
+            self.optimisers_biases = None
 
         self.forward_core = load_core("full_pop")
 
@@ -409,8 +452,21 @@ class FullyConnectedLayer(Layer):
         return input_gradients, weight_gradients, bias_gradients
 
     def apply_gradients(self, weight_gradients: Gradients, bias_gradients: Gradients, count: int) -> None:  # todo - Implement ADAM
-        self.weights += weight_gradients / count
-        self.biases += bias_gradients / count
+        if not self.optimisers_weights:
+            self.weights += weight_gradients / count
+            self.biases += bias_gradients / count
+
+        else:
+            weights = self.weights.get_as_array()
+            biases = self.biases.get_as_array()
+
+            self.optimisers_weights.step()
+            adjusted_weights = self.optimisers_weights.optimise(weights, weight_gradients)
+            self.weights = NetworkBuffer(adjusted_weights, adjusted_weights.shape)
+
+            self.optimisers_biases.step()
+            adjusted_biases = self.optimisers_biases.optimise(biases, bias_gradients)
+            self.biases = NetworkBuffer(adjusted_biases, adjusted_biases.shape)
 
     def serialize(self):
         return base64.b64encode(self.weights.get_as_array().tobytes()) + b".." + base64.b64encode(

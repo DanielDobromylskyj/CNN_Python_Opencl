@@ -1,101 +1,11 @@
 import pygame
-import psutil
 import math
-import subprocess
 import threading
-import platform
 
-try:
-    from pynvml import nvmlInit, nvmlDeviceGetHandleByIndex, nvmlDeviceGetUtilizationRates, nvmlDeviceGetCount, nvmlDeviceGetTemperature, NVML_TEMPERATURE_GPU
+import device_info
 
-    nvml_available = True
-    nvmlInit()
-except ImportError:
-    nvml_available = False
-
-
-try:
-    import wmi  # Windows-specific
-    wmi_available = True
-except ImportError:
-    wmi_available = False
-
-def get_gpu_usage():
-    """Returns GPU utilization percentage. Supports NVIDIA and AMD GPUs."""
-    if nvml_available:  # If nvidia
-        handle = nvmlDeviceGetHandleByIndex(0)
-        utilization = nvmlDeviceGetUtilizationRates(handle)
-        return utilization.gpu
-
-    # Try AMD (Linux)
-    try:
-        amd_usage = subprocess.check_output("rocm-smi --showuse --json", shell=True).decode()
-        return float(eval(amd_usage)["card0"]["GPU use (%)"])
-    except Exception as e:
-        raise Exception("Unsupported GPU:", e)
-
-
-def get_gpu_temperature():
-    if nvml_available:
-        try:
-            nvmlInit()
-            handle = nvmlDeviceGetHandleByIndex(0)  # First GPU
-            return nvmlDeviceGetTemperature(handle, NVML_TEMPERATURE_GPU)
-        except Exception as e:
-            raise Exception(f"Error getting NVIDIA GPU temp: {e}")
-
-    # Try AMD (Linux)
-    try:
-        amd_temp = subprocess.check_output("rocm-smi --showtemp --json", shell=True).decode()
-        return float(eval(amd_temp)["card0"]["Temperature (Sensor edge) (C)"])
-    except Exception:
-        raise Exception("No valid gpu (OR error)")
-
-
-def get_cpu_temperature():
-    """Returns CPU temperature in Celsius."""
-    system = platform.system()
-    if str(system) == "Linux":
-        try:
-            temps = psutil.sensors_temperatures()
-            if "coretemp" in temps:
-                return max(temp.current for temp in temps["coretemp"])
-
-            if "k10temp" in temps:
-                return max(temp.current for temp in temps["k10temp"])
-
-        except AttributeError:
-            raise Exception("Sensor data not available")
-
-    elif system == "Windows" and wmi_available:
-        try:
-            w = wmi.WMI(namespace="root\WMI")
-            sensors = w.MSAcpi_ThermalZoneTemperature()
-            if sensors:
-                return round(sensors[0].CurrentTemperature / 10 - 273.15, 2)  # Convert to Celsius
-        except Exception:
-            raise Exception("WMI error")
-
-    elif system == "Darwin":  # macOS
-        try:
-            output = subprocess.check_output(["istats", "cpu", "temp"]).decode()
-            return float(output.split(":")[-1].strip().replace("°C", ""))
-        except Exception:
-            raise Exception("Install iStats: 'gem install iStats'")
-
-    raise Exception("CPU temperature not supported")
-
+device = device_info.get_device_info()  # Only has AMD support (that is tested) + Linux uses ROCm
 pygame.init()
-
-def get_cpu_usage() -> float:
-    return psutil.cpu_percent(interval=0.5)
-
-def get_mem_usage():
-    return psutil.virtual_memory().percent
-
-def get_swap_usage():
-    """Returns swap memory usage in percentage."""
-    return psutil.swap_memory().percent
 
 def get_datapoints_test():
     return [(1, 200), (2, 150), (3, 120), (4, 110), (5, 108), (6, 106), (7, 98), (8, 50), (9, 40), (10, 38), (11, 37)]
@@ -113,8 +23,6 @@ class Utilisation:
         self.current_usage = 0
 
         self.softness_factor = softness_factor
-
-        threading.Thread(target=self.__update_usage, daemon=True).start()
 
 
     def __update_usage(self):
@@ -138,7 +46,7 @@ class Utilisation:
                 text,
                 (
                     self.size // 2 - text.get_width() // 2,
-                    self.size - text.get_width()
+                    self.size - text.get_height()
                 )
             )
 
@@ -148,6 +56,8 @@ class Utilisation:
                             math.radians(270 - 45 - (270 * (min(60, max(0, frame_counter-61)) / 60))),
                             3)
 
+        if frame_counter == 120:
+            threading.Thread(target=self.__update_usage, daemon=True).start()
 
         return self.surface
 
@@ -307,14 +217,14 @@ class Display:
 
         self.display_elements = [
             [BoxWindow(470, 470), (self.screen.get_width() - 510, 10)],
-            [Utilisation("CPU", get_cpu_usage), (self.screen.get_width() - 500, 30)],
-            [Utilisation("GPU", get_gpu_usage, softness_factor=0.01), (self.screen.get_width() - 250, 30)],
-            [Utilisation("MEM", get_mem_usage, softness_factor=0.01), (self.screen.get_width() - 500, 270)],
-            [Utilisation("SWP", get_swap_usage, softness_factor=0.01), (self.screen.get_width() - 250, 270)],
+            [Utilisation("CPU", device.get_cpu_usage), (self.screen.get_width() - 500, 30)],
+            [Utilisation("GPU", device.get_gpu_usage, softness_factor=0.01), (self.screen.get_width() - 250, 30)],
+            [Utilisation("MEM", device.get_mem_usage, softness_factor=0.01), (self.screen.get_width() - 500, 270)],
+            [Utilisation("SWP", device.get_swap_usage, softness_factor=0.01), (self.screen.get_width() - 250, 270)],
 
             [BoxWindow(470, 240), (self.screen.get_width() - 510, 10+500)],
-            [Utilisation("C-TEMP", get_cpu_temperature), (self.screen.get_width() - 500, 30+500)],
-            [Utilisation("G-TEMP", get_gpu_temperature), (self.screen.get_width() - 250, 30+500)],
+            [Utilisation("C-TEMP", device.get_cpu_temperature), (self.screen.get_width() - 500, 30+500)],
+            [Utilisation("G-TEMP", device.get_gpu_temperature), (self.screen.get_width() - 250, 30+500)],
 
             [Graph(500, 500, get_datapoints_test, "Epoch", "Error"), (self.screen.get_width() // 2 - 250, 20)],
         ]

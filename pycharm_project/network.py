@@ -14,6 +14,7 @@ class InvalidNetwork(Exception):
 
 
 def validate_network_layout(layout):
+    """ Ensures that the network layout is valid, and that the layer sizes are not mismatched"""
     if len(layout) == 0:
         raise InvalidNetwork("Network Layout Contains No Layers")
 
@@ -48,6 +49,7 @@ class Network:
 
     def forward_pass(self, inputs, save_layer_data=False,
                      for_display=False):
+        """ Performs a forward pass through the network."""
         output_values = buffers.create_network_buffer_from_input(inputs)
 
         save_values = [] if not save_layer_data else [(output_values, None)]
@@ -98,6 +100,7 @@ class Network:
 
     def backward_pass(self, inputs: np.ndarray, target: np.ndarray, learning_rate: float):
         data = self.forward_pass(inputs, save_layer_data=True)
+        """ Performs a backward pass though the network for gradient calculations """
         outputs = data[-1][0].get_as_array()
 
         error = target - outputs
@@ -154,6 +157,7 @@ class Network:
         ]
 
     def compute_epoch(self, training_data, learning_rate: float):
+        """ Performs a training cycle for each piece of training data"""
         gradient_data = [
             self.backward_pass(sample, target, learning_rate)
             for sample, target in training_data
@@ -217,6 +221,7 @@ class Network:
         file.write()
 
     def debug_dump(self):
+        """ Outputs useful information about the network incase of a problem """
         print(">>> NETWORK DUMP <<<")
 
         for i, layer in enumerate(self.layout):

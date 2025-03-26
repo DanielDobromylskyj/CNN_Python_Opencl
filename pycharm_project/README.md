@@ -26,7 +26,7 @@ OpenCL allows parallel computing across various hardware platforms, including GP
 
 Install dependencies with:
 ```bash
-pip install pyopencl numpy matplotlib
+python -m pip install pyopencl numpy matplotlib
 ```
 
 ## Usage

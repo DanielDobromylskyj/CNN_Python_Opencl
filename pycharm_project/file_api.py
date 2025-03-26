@@ -2,11 +2,13 @@
 
 class File:
     def __init__(self, path):
+        """ Low level File API for reading and writing compressed dicts containing byte data """
         self.path = path
         self.segments = {}
 
     @staticmethod
     def __read_next_int(fb):
+        """ Reads and returns an int stored in the file """
         bin_data = b""
         while True:
             char = fb.read(1)
@@ -20,6 +22,7 @@ class File:
             bin_data += char
 
     def load(self):
+        """ Loads segment data and decodes it"""
         with open(self.path, "rb") as fb:
             while True:
                 segment_name_size = self.__read_next_int(fb)
@@ -47,6 +50,7 @@ class File:
         return self.__write_size_of_data(segment_key) + segment_key.encode() + self.__write_size_of_data(segment_data) + segment_data
 
     def write(self):
+        """ Writes a binary file"""
         file_binary = b""
         for segment_key in self.segments.keys():
             file_binary += self.__write_segment(segment_key)

@@ -14,6 +14,11 @@ else:
     import openslide
 
 
+class DocString:
+    def __init__(self):
+        """ This is a testing file for training misc networks """
+
+
 with open("trainingPoints.txt", "r") as f:
     unprocessedTrainingData = eval(f.read())
 

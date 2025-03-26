@@ -11,6 +11,7 @@ class viewer:
         matplotlib.use('TkAgg')
 
     def display(self, network, inputs, target=None):
+        """ Displays network data such as weights and biases in graph form"""
         max_y = max([layer.get_filter_count() if isinstance(layer, layers.ConvolutedLayer) else 1 for layer in network.layout]) + 1
 
         if self.fig is None:

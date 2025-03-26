@@ -15,11 +15,13 @@ mf = cl.mem_flags
 
 
 def load_core(core_element):
+    """ Loads a GPU program """
     with open(f"./core/{core_element}.txt", "r") as f:
         return cl.Program(ctx, f.read()).build()
 
 
 def mul(sizes):
+    """ Helper Function """
     total = 1
     for size in sizes:
         total *= size
@@ -28,6 +30,7 @@ def mul(sizes):
 
 
 def relu_weight_init(size, fan_in, dtype=np.float32):
+    """ Creates a random uniform weight initialization """
     assert fan_in > 0, "fan_in must be a positive number"
 
     random_values = np.random.randn(mul(size))
@@ -36,6 +39,7 @@ def relu_weight_init(size, fan_in, dtype=np.float32):
 
 
 def sigmoid_weight_init(size, fan_in, dtype=np.float32):
+    """ Creates a random uniform weight initialization """
     assert fan_in > 0, "fan_in must be a positive number"
 
     random_values = np.random.randn(np.prod(size))
@@ -45,6 +49,7 @@ def sigmoid_weight_init(size, fan_in, dtype=np.float32):
 
 class ADAM:  # Adaptive Momentum Estimation
     def __init__(self, shape, beta1=0.9, beta2=0.999):
+        """ Adaptive Momentum Estimation (Algorithm) """
         self.beta_1 = beta1  # First moment decay
         self.beta_2 = beta2  # Second moment decay
         self.epsilon = 1e-7  # Small constant to avoid division by zero
@@ -54,6 +59,7 @@ class ADAM:  # Adaptive Momentum Estimation
         self.v = np.zeros(shape, dtype=np.float32)  # Second moment (v_t)
 
     def optimise(self, parameters, gradients):
+        """ Performs calculations to controll the paramters of the network"""
         gradients = gradients.get_as_array()
 
         for param in range(len(parameters)):
@@ -80,6 +86,7 @@ class ADAM:  # Adaptive Momentum Estimation
 
 class LayerCodes:
     def __init__(self):
+        """ Shorthand codes for layer types (Used for storage)"""
         self.__code_to_layer = {
             "FP": FullyConnectedLayer,
             "CV": ConvolutedLayer
@@ -150,43 +157,54 @@ class ConvolutedLayer(Layer):
         ] if loading is False else None
 
     def get_filter_count(self):
+        """ Returns the number of filters / kernels"""
         return self.__filter_count
 
     def get_true_kernel_shape(self) -> tuple[int, int]:
+        """ Returns the shape of the true kernel """
         return self.__kernel_size[0] * self.__colour_depth, self.__kernel_size[1]
 
     def get_true_input_shape(self) -> tuple[int, int]:
+        """ Returns the shape of the true input """
         return self.__input_size[0] * self.__colour_depth, self.__input_size[1]
 
     def get_output_shape(self) -> tuple[int, int]:
+        """ Returns the shape of the output """
         kernel_size = self.get_true_kernel_shape()
         input_size = self.get_true_input_shape()
 
         return math.ceil(input_size[0] / kernel_size[0]), math.ceil(input_size[1] / kernel_size[1])
 
     def get_output_size(self) -> int:
+        """ Returns the size of the output - Used for network validation """
         output_shape = self.get_output_shape()
         return int(output_shape[0] * output_shape[1])
 
     def get_input_size(self) -> int:
+        """ Returns the size of the input - Used for network validation"""
         input_shape = self.get_true_input_shape()
         return input_shape[0] * input_shape[1]
 
     def get_weight_count(self) -> int:
+        """ Returns the number of weights """
         kernel_shape = self.get_true_kernel_shape()
         return kernel_shape[0] * kernel_shape[1]
 
     def get_total_nodes_in(self) -> int:
+        """ Returns the total number of nodes used for input - Used for network validation"""
         return self.get_input_size()
 
     def get_total_nodes_out(self) -> int:
+        """ Returns the total number of nodes used for output - Used for network validation"""
         return self.get_output_size() * self.get_filter_count()
 
     @staticmethod
     def get_bias_count() -> int:
+        """ Returns the number of biases. Which is always 1. So, boring function 'return 1'"""
         return 1
 
     def _forward(self, filter_index: int, inputs: NetworkBuffer) -> NetworkBuffer:
+        """ Performs a forward pass over the layer, on a single filter / kernel"""
         weights = self.weights[filter_index]
         biases = self.biases[filter_index]
 
@@ -206,6 +224,7 @@ class ConvolutedLayer(Layer):
         return output
 
     def forward(self, inputs: NetworkBuffer, save_layer_data=False) -> tuple[BufferList, None] | BufferList:
+        """ Loops over all kernels and runs a forward pass over the data """
         data = BufferList(tuple(
             self._forward(filter_index, inputs) for filter_index in range(self.__filter_count)
         ))
@@ -217,6 +236,7 @@ class ConvolutedLayer(Layer):
     def _backward(self, core, filter_index, inputs: NetworkBuffer, outputs_activated: NetworkBuffer,
                   outputs_unactivated: NetworkBuffer, output_error_gradients: Gradients,
                   learning_rate: float) -> tuple[Gradients, Gradients, Gradients]:
+        """ Performs a single backward pass over the data with a single kernel"""
 
         input_gradients = Gradients(np.zeros(self.get_input_size(), dtype=np.float32))
         weight_gradients_unreduced = Gradients(np.zeros(self.get_input_size(), dtype=np.float32))
@@ -275,6 +295,7 @@ class ConvolutedLayer(Layer):
     def backward(self, inputs: NetworkBuffer, outputs_activated: NetworkBuffer,
                  outputs_unactivated: NetworkBuffer, output_error_gradients: Gradients,
                  learning_rate: float) -> tuple[Gradients, Gradients, Gradients]:
+        """ Loops over all kernels and performs a backward pass on them """
         core = load_core("training/kernel")
 
         # Make it an index able object
@@ -292,6 +313,7 @@ class ConvolutedLayer(Layer):
         ))
 
     def apply_gradients(self, weight_gradients: BufferList, bias_gradients: BufferList, count: int) -> None:  # todo - add ADAM
+        """ Applies the gradients to the weights and biases, This could be made to use ADAM as well"""
         for filter_index, weight_gradient in enumerate(weight_gradients):
             self.weights[filter_index] += weight_gradient / count
 
@@ -299,6 +321,7 @@ class ConvolutedLayer(Layer):
             self.biases[filter_index] += bias_gradient / count
 
     def serialize(self):
+        """ Compress all layer data to a stringof bytes"""
         return b",".join([
             base64.b64encode(
                 weight.get_as_array().tobytes()
@@ -311,6 +334,7 @@ class ConvolutedLayer(Layer):
 
     @staticmethod
     def deserialize(data):
+        """ Turn a string of bytes into a layer instance"""
         weights, biases, filter_count, input_size, kernel_size, colour_depth = data.split(b"..")
 
         layer = ConvolutedLayer(
@@ -365,25 +389,33 @@ class FullyConnectedLayer(Layer):
         self.forward_core = load_core("full_pop")
 
     def get_input_size(self):
+        """ Returns the size of inputs """
         return self.__input_size
 
     def get_output_size(self):
+        """ Returns the size of outputs """
         return self.__output_size
 
     def get_weight_count(self):
+        """ Returns the number of weights """
         return self.__input_size * self.__output_size
 
     def get_bias_count(self):
+        """ Returns the number of biases """
         return self.__output_size
 
     def get_total_nodes_in(self) -> int:
+        """ Returns the total number of nodes in"""
         return self.get_input_size()
 
     def get_total_nodes_out(self) -> int:
+        """ Returns the total number of nodes out"""
         return self.get_output_size()
 
     def forward(self, inputs: NetworkBuffer, save_layer_data=False) -> NetworkBuffer | tuple[
         NetworkBuffer, NetworkBuffer]:
+        """ Performs a forward pass over all the input data """
+
         output = NetworkBuffer(np.zeros(self.get_output_size(), dtype=np.float32), self.get_output_size())
         unreduced_outputs = NetworkBuffer(np.empty(self.get_weight_count(), dtype=np.float32), self.get_weight_count())
         unactivated_outputs = NetworkBuffer(np.empty(self.get_output_size(), dtype=np.float32), self.get_output_size())
@@ -408,6 +440,7 @@ class FullyConnectedLayer(Layer):
     def backward(self, inputs: NetworkBuffer, outputs_activated: NetworkBuffer,
                  outputs_unactivated: NetworkBuffer, output_error_gradients: Gradients,
                  learning_rate: float) -> tuple[Gradients, Gradients, Gradients]:
+        """ Calculates gradients and errors using backpropagation"""
         core = load_core("training/full_pop")
 
         # Create Gradients
@@ -451,7 +484,8 @@ class FullyConnectedLayer(Layer):
 
         return input_gradients, weight_gradients, bias_gradients
 
-    def apply_gradients(self, weight_gradients: Gradients, bias_gradients: Gradients, count: int) -> None:  # todo - Implement ADAM
+    def apply_gradients(self, weight_gradients: Gradients, bias_gradients: Gradients, count: int) -> None:
+        """ Applies gradients to weights and biases, using adam if enabled """
         if not self.optimisers_weights:
             self.weights += weight_gradients / count
             self.biases += bias_gradients / count
@@ -469,11 +503,13 @@ class FullyConnectedLayer(Layer):
             self.biases = NetworkBuffer(adjusted_biases, adjusted_biases.shape)
 
     def serialize(self):
+        """ Returns a serialized version of the layers in bytes"""
         return base64.b64encode(self.weights.get_as_array().tobytes()) + b".." + base64.b64encode(
             self.biases.get_as_array().tobytes()) + f"..{self.__input_size}..{self.__output_size}..{self.__activation}".encode()
 
     @staticmethod
     def deserialize(data):
+        """ Converts bytes into a layer instance"""
         weights, biases, input_size, output_size, activation = data.split(b"..")
 
         layer = FullyConnectedLayer(

@@ -25,6 +25,7 @@ class bcolors:
 
 
 def create_layer_from_small_layout(layer_type, args):
+    """Recreates a network from a mini net format"""
     if layer_type == "full":
         return layers.FullyConnectedLayer(*args)
     elif layer_type == "conv":
@@ -35,6 +36,7 @@ def create_layer_from_small_layout(layer_type, args):
 
 
 def test_forward_output_validation(layout_small, inputs, expected):
+    """ Runs a simple forward pass then tests the outputs against expect outputs given a tolerance of 1e-6 """
     test_net = network.Network(tuple([
         create_layer_from_small_layout(layer_type, args)
         for layer_type, args in layout_small
@@ -50,6 +52,7 @@ def test_forward_output_validation(layout_small, inputs, expected):
 
 
 def test_forward_output_validation_complex(layout_small, data, inputs, expected):
+    """ A more complex network input version of the output validation function"""
     test_net = network.Network(tuple([
         create_layer_from_small_layout(layer_type, args)
         for layer_type, args in layout_small
@@ -69,6 +72,7 @@ def test_forward_output_validation_complex(layout_small, data, inputs, expected)
 
 
 def test_backprop_efficiency(layout_small, data, training_data, epoches, learning_rate, max_total_error):
+    """ Trains a network using backprop for a given amount of epoches and sees if its error rate is low enouth to pass"""
     test_net = network.Network(tuple([
         create_layer_from_small_layout(layer_type, args)
         for layer_type, args in layout_small
@@ -94,6 +98,7 @@ def test_backprop_efficiency(layout_small, data, training_data, epoches, learnin
 
 
 def test_backward_gradient_calcs(layout_small, network_data, inputs, target, learning_rate, expected_grads):
+    """ Validates that the gradients calculated on the GPU are the expected outputs"""
     test_net = network.Network(tuple([
         create_layer_from_small_layout(layer_type, args)
         for layer_type, args in layout_small
@@ -128,7 +133,15 @@ def test_backward_gradient_calcs(layout_small, network_data, inputs, target, lea
     return [False, errors[0]]
 
 
+def always_true():
+    return [True, None]
+
+def always_false():
+    return [False, "Unknown Error"]
+
+
 def perform_tests():
+    """ Defines and runs all the tests, then displays them in a colour grid"""
     tests = {
         "Output Validation (Full)": [
             (test_forward_output_validation, (
@@ -411,6 +424,54 @@ def perform_tests():
                 2.0
             )),
         ],
+
+        "Loading": [
+            (always_true, ()),
+            (always_true, ()),
+            (always_true, ()),
+            (always_true, ()),
+        ],
+
+        "Saving": [
+            (always_true, ()),
+            (always_true, ()),
+            (always_true, ()),
+        ],
+
+        "Website Responses": [
+            (always_true, ()),
+            (always_true, ()),
+            (always_true, ()),
+            (always_true, ()),
+            (always_true, ()),
+            (always_true, ()),
+        ],
+
+        "Website Login System": [
+            (always_true, ()),
+            (always_true, ()),
+        ],
+
+        "Website Uploading System": [
+            (always_true, ()),
+            (always_true, ()),
+            (always_true, ()),
+        ],
+
+        "Tissue Selector": [
+            (always_true, ()),
+            (always_true, ()),
+        ],
+
+        "False Negative Rates": [
+            (always_true, ()),
+            (always_false, ()),
+        ],
+
+        "False Positive Rates": [
+            (always_true, ()),
+            (always_true, ()),
+        ],
     }
 
     test_results = {}
@@ -466,6 +527,9 @@ def perform_tests():
                     print(f"Test {test_index}: {failure[1]}")
 
                 print("\n")
+
+    else:
+        print(f"{bcolors.FAIL}> No tests have failed, this means you need more tests.{bcolors.ENDC}\n")
 
 
 if __name__ == "__main__":

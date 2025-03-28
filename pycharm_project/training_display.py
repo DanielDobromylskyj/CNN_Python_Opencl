@@ -5,6 +5,7 @@ import math
 import threading
 import sys
 
+from oauthlib.uri_validate import segment
 
 import device_info
 

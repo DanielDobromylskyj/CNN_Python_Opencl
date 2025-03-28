@@ -1,6 +1,7 @@
 import subprocess
 import psutil
 import platform
+import re
 
 try:
     from pynvml import nvmlInit, nvmlDeviceGetHandleByIndex, nvmlDeviceGetUtilizationRates, nvmlDeviceGetCount, nvmlDeviceGetTemperature, NVML_TEMPERATURE_GPU
@@ -57,6 +58,14 @@ class DefaultDevice:
         """Returns swap memory usage in percentage."""
         return psutil.swap_memory().percent
 
+    @staticmethod
+    def get_gpu_power():
+        return -1
+
+    @staticmethod
+    def get_cpu_power():
+        return -1
+
 class Windows(DefaultDevice):
     @staticmethod
     def get_cpu_temperature():
@@ -91,16 +100,53 @@ class Windows(DefaultDevice):
 
 class Linux(DefaultDevice):
     @staticmethod
+    def get_gpu_power():
+        try:
+            output = subprocess.check_output(["rocm-smi", "--showpower"], encoding="utf-8")
+            match = re.search(r"\s+(\d+\.\d+)W", output)  # Extracts power in Watts
+
+            if match:
+                return float(match.group(1))
+
+            else:
+                try:
+                    output = subprocess.check_output(["sensors"], encoding="utf-8")
+
+                    for line in output.split("\n"):
+                        if "ppt" in line.lower():
+                            return float(line.split()[1])  # Extracts power in W
+                except Exception as e:
+                    return f"Error: {e}"
+
+            return -2
+
+        except Exception as e:
+            return -1
+
+    @staticmethod
+    def get_cpu_power():
+        try:
+            output = subprocess.check_output(["sensors"], encoding="utf-8")
+            print(output)
+            for line in output.split("\n"):
+                if "power" in line.lower():
+                    return float(line.split()[1])  # Extracts power in W
+
+            return 0
+        except Exception as e:
+            return f"Error: {e}"
+
+    @staticmethod
     def get_cpu_temperature():
         """Returns CPU temperature in Celsius."""
 
         try:
             temps = psutil.sensors_temperatures()
             if "coretemp" in temps:
-                return max(temp.current for temp in temps["coretemp"])
+                return ((max(temp.current for temp in temps["coretemp"]) - 20) / 120) * 100
 
             if "k10temp" in temps:  # My laptop is special
-                return max(temp.current for temp in temps["k10temp"])
+                return ((max(temp.current for temp in temps["k10temp"]) - 20) / 120) * 100
 
         except AttributeError:
             return -17
@@ -134,7 +180,7 @@ class Linux(DefaultDevice):
 
         try:
             amd_temp = subprocess.check_output("rocm-smi --showtemp --json", shell=True).decode()
-            return float(eval(amd_temp)["card0"]["Temperature (Sensor edge) (C)"])
+            return ((float(eval(amd_temp)["card0"]["Temperature (Sensor edge) (C)"]) - 20) / 120) * 100
         except Exception:
             pass
 

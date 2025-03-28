@@ -44,6 +44,15 @@ class Network:
     def __init__(self, layout: tuple, validate_network=True):
         self.layout = layout
 
+        self.__current_epoch = 0
+        self.__max_epochs = 0
+
+        self.__current_sample_count = 0
+        self.__max_sample_count = 0
+
+        self.__current_sample_progress = 0
+        self.__max_sample_progress = 0
+
         if validate_network:
             validate_network_layout(self.layout)
 
@@ -98,7 +107,10 @@ class Network:
 
         raise ValueError(f"Could not ensure data is a network buffer or convert to one\nData:\n{data}")
 
-    def backward_pass(self, inputs: np.ndarray, target: np.ndarray, learning_rate: float):
+    def backward_pass(self, inputs: np.ndarray, target: np.ndarray, learning_rate: float, index=None):
+        if index:
+            self.__current_sample_count = index
+
         data = self.forward_pass(inputs, save_layer_data=True)
         """ Performs a backward pass though the network for gradient calculations """
         outputs = data[-1][0].get_as_array()
@@ -159,8 +171,8 @@ class Network:
     def compute_epoch(self, training_data, learning_rate: float):
         """ Performs a training cycle for each piece of training data"""
         gradient_data = [
-            self.backward_pass(sample, target, learning_rate)
-            for sample, target in training_data
+            self.backward_pass(sample, target, learning_rate, index=i)
+            for i, (sample, target) in enumerate(training_data)
         ]
 
         weight_gradients = self.__condense_gradients(gradient_data, 0)
@@ -192,10 +204,18 @@ class Network:
 
         return round(sum(errors) / tests, decimals), round(min(errors), decimals), round(max(errors), decimals)
 
+    def get_display_data(self):
+        return (self.__current_epoch / self.__max_epochs), (self.__current_sample_count / self.__max_sample_count), 0
+
     def train(self, training_data, test_data, epochs, learning_rate, show_stats=True):
         start = time.time()
 
+        self.__max_epochs = epochs
+
         for epoch in range(epochs):
+            self.__current_epoch = epoch
+            self.__max_sample_count = len(training_data)
+
             self.compute_epoch(training_data, learning_rate)
 
             elapsed = time.time() - start

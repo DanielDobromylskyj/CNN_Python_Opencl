@@ -39,12 +39,12 @@ for segment in unprocessedTrainingData:
 if __name__ == "__main__":
     import training_display
 
-    training_display.Display_threaded()
-
     net = Network((
-        layers.ConvolutedLayer((100, 100), (5, 5), filter_count=3, colour_depth=3, testing=[1, 1]),
-        layers.FullyConnectedLayer(400 * 3, 2, activations.ReLU, testing=[1, 1])
+        layers.ConvolutedLayer((100, 100), (5, 5), filter_count=3, colour_depth=3),
+        layers.FullyConnectedLayer(81225, 2, activations.ReLU)
     ))
+
+    training_display.Display_threaded(net)
 
     net.save("start.pyn")
     #net = Network.load("training.pyn")

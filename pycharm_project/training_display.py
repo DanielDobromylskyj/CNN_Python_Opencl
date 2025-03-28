@@ -5,6 +5,7 @@ import math
 import threading
 import sys
 
+
 import device_info
 
 device = device_info.get_device_info()  # Only has AMD support (that is tested) + Linux uses ROCm
@@ -497,15 +498,146 @@ class PowerOutput:
 
         return new
 
-def Display_threaded():
-    threading.Thread(target=__display_threaded).start()
 
-def __display_threaded():
-    Display().run()
+class EpochProgress:
+    def __init__(self, width, height, value_a: dict, value_b: dict, value_c: dict):
+        self.width = width
+        self.height = height
+
+        self.value_a = value_a
+        self.value_b = value_b
+        self.value_c = value_c
+
+        self.values = [0, 0, 0]
+
+        self.surface = pygame.Surface((self.width, self.height))
+        self.font = pygame.font.SysFont("monospace", 20)
+
+    def __update_usage(self, func, index):
+        while True:
+            self.values[index] = func()
+            time.sleep(0.05)
+
+    def display_load(self, frame_count):
+        section_A_progress = min(60, frame_count) / 60
+        section_B_progress = min(60, frame_count - 60) / 60
+
+        pygame.draw.line(
+            self.surface,
+            (255, 255, 255),
+            (0, 0),
+            (self.width * section_A_progress, 0),
+        )
+
+        pygame.draw.line(
+            self.surface,
+            (255, 255, 255),
+            (0, 0),
+            (0, self.height * section_A_progress),
+        )
+
+        pygame.draw.line(
+            self.surface,
+            (255, 255, 255),
+            (self.width, self.height - 2),
+            (self.width * (1 - section_A_progress), (self.height - 2)),
+            width=2,
+        )
+
+        pygame.draw.line(
+            self.surface,
+            (255, 255, 255),
+            (self.width - 2, self.height),
+            (self.width - 2, self.height * (1 - section_A_progress)),
+            width=2,
+        )
+
+        if section_B_progress > 0:
+            pygame.draw.rect(
+                self.surface,
+                (0, 0, 0),
+                (2, 2, self.width-4, self.height-4),
+            )
+
+            section_heights = (self.height - 4) // 6
+
+            pygame.draw.rect(
+                self.surface,
+                (255, 255, 255),
+                (40, 10 + section_heights, (self.width - 80) * section_B_progress, 40),
+                width=2,
+            )
+
+            pygame.draw.rect(
+                self.surface,
+                (255, 255, 255),
+                (40, 10 + (section_heights*3), (self.width - 80) * section_B_progress, 40),
+                width=2,
+            )
+
+            pygame.draw.rect(
+                self.surface,
+                (255, 255, 255),
+                (40, 10 + (section_heights*5), (self.width - 80) * section_B_progress, 40),
+                width=2,
+            )
+
+            colour = [round(255 * section_B_progress) for i in range(3)]
+            text = self.font.render(self.value_a["name"], True, colour)
+            self.surface.blit(text, ((self.width // 2) - (text.get_width() // 2), 2 + (section_heights * 0.5)))
+
+            text = self.font.render(self.value_b["name"], True, colour)
+            self.surface.blit(text, ((self.width // 2) - (text.get_width() // 2), 2 + (section_heights * 2.5)))
+
+            text = self.font.render(self.value_c["name"], True, colour)
+            self.surface.blit(text, ((self.width // 2) - (text.get_width() // 2), 2 + (section_heights * 4.5)))
+
+        if frame_count == 120:
+            threading.Thread(target=self.__update_usage, args=(self.value_a["func"], 0), daemon=True).start()
+            threading.Thread(target=self.__update_usage, args=(self.value_b["func"], 1), daemon=True).start()
+            threading.Thread(target=self.__update_usage, args=(self.value_c["func"], 2), daemon=True).start()
+
+        return self.surface
+
+    def display(self):
+        new = pygame.Surface((self.width, self.height))
+        new.blit(self.surface, (0, 0))
+
+        section_heights = (self.height - 4) // 6
+
+        pygame.draw.rect(
+            new,
+            (255, 255, 255),
+            (40, 10 + section_heights, (self.width - 80) * (self.values[0]), 40),
+        )
+
+        pygame.draw.rect(
+            new,
+            (255, 255, 255),
+            (40, 10 + (section_heights * 3), (self.width - 80) * (self.values[1]), 40),
+        )
+
+        pygame.draw.rect(
+            new,
+            (255, 255, 255),
+            (40, 10 + (section_heights * 5), (self.width - 80) * (self.values[2]), 40),
+        )
+        return new
+
+
+def Display_threaded(*args):
+    threading.Thread(target=__display_threaded, args=args).start()
+
+def __display_threaded(*args):
+    Display(*args).run()
+
+def return_0():
+    time.sleep(1)
+    return 0
 
 
 class Display:
-    def __init__(self):
+    def __init__(self, net=None):
         pygame.init()
 
         screen_size = pygame.display.get_desktop_sizes()[0]
@@ -530,6 +662,11 @@ class Display:
             [TerminalOutput(1350, 400), (20, 580)],
 
             [PowerOutput(470, 150, "GPU", device.get_gpu_power), (self.screen.get_width() - 510, 30+500+300)],
+            [EpochProgress(700, 400,
+                           {"name": "Epoch", "func": (lambda: net.get_display_data()[0]) if net else return_0},
+                           {"name": "Batch", "func": (lambda: net.get_display_data()[1]) if net else return_0},
+                           {"name": "Progress", "func": (lambda: net.get_display_data()[2]) if net else return_0}),
+             (20, 20)]
         ]
 
     def run(self):

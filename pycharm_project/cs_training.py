@@ -37,20 +37,20 @@ for segment in unprocessedTrainingData:
 
 
 if __name__ == "__main__":
-    import training_display
+    import training_display_lite
 
     net = Network((
-        layers.ConvolutedLayer((100, 100), (5, 5), filter_count=3, colour_depth=3),
-        layers.FullyConnectedLayer(81225, 2, activations.ReLU)
+        layers.ConvolutedLayer((100, 100), (5, 5), filter_count=3, colour_depth=3, stride=5),
+        layers.FullyConnectedLayer(3249, 2, activations.ReLU)
     ))
 
-    training_display.Display_threaded(net)
+    training_display_lite.Display.launch_threaded(net)
 
     net.save("start.pyn")
     #net = Network.load("training.pyn")
 
     l_rate = 0.1
 
-    net.train(trainingData[:5], trainingData[:5], 500, l_rate)
+    net.train(trainingData[:5], trainingData[:5], 500, l_rate, show_stats=False)
 
     net.save("training.pyn")

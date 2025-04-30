@@ -5,7 +5,6 @@ import math
 import threading
 import sys
 
-from oauthlib.uri_validate import segment
 
 import device_info
 
@@ -673,6 +672,7 @@ class Display:
     def run(self):
         self.running = True
         frame_counter = 0
+
         while self.running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -703,10 +703,7 @@ class Display:
 
             pygame.display.flip()
 
-            if self.display_loading:
-                self.clock.tick(60)
-            else:
-                self.clock.tick(30)  # performance sake
+            self.clock.tick(30)
 
         pygame.quit()
 

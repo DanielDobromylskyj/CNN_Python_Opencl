@@ -54,9 +54,17 @@ class DefaultDevice:
         return psutil.virtual_memory().percent
 
     @staticmethod
+    def get_mem_max():
+        return psutil.virtual_memory().total
+
+    @staticmethod
     def get_swap_usage():
         """Returns swap memory usage in percentage."""
         return psutil.swap_memory().percent
+
+    @staticmethod
+    def get_swap_max():
+        return psutil.swap_memory().total
 
     @staticmethod
     def get_gpu_power():
@@ -65,6 +73,10 @@ class DefaultDevice:
     @staticmethod
     def get_cpu_power():
         return -1
+
+    @staticmethod
+    def get_name():
+        return platform.node()
 
 class Windows(DefaultDevice):
     @staticmethod
@@ -126,15 +138,12 @@ class Linux(DefaultDevice):
     @staticmethod
     def get_cpu_power():
         try:
-            output = subprocess.check_output(["sensors"], encoding="utf-8")
-            print(output)
-            for line in output.split("\n"):
-                if "power" in line.lower():
-                    return float(line.split()[1])  # Extracts power in W
+            output = subprocess.check_output(["cat /sys/class/power_supply/BAT0/power_now"], encoding="utf-8", shell=True)
+            return int(output) / 1000000
 
-            return 0
         except Exception as e:
-            return f"Error: {e}"
+            print("ERROR", e)
+            return -100
 
     @staticmethod
     def get_cpu_temperature():

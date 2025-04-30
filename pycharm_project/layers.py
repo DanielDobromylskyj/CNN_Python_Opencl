@@ -236,7 +236,7 @@ class ConvolutedLayer(Layer):
         biases = self.biases[filter_index]
 
         # maybe this could be optimised, as we are writing an empty buffer to the gpu, instead of just making an empty gpu buffer
-        output = NetworkBuffer(np.zeros(self.get_output_size(), dtype=np.float32), self.get_output_size())
+        output = NetworkBuffer(np.zeros(self.get_output_size(), dtype=np.float32), (self.get_output_size(),))
 
         filter_shape = self.get_true_kernel_shape()
         input_shape = self.get_true_input_shape()
@@ -288,6 +288,7 @@ class ConvolutedLayer(Layer):
                     np.int32(filter_shape[0]),
                     np.int32(filter_shape[1]),
                     np.int32(self.get_output_shape()[0]),
+                    np.int32(self.__stride),
                     np.float32(learning_rate)
                     ).wait()
 

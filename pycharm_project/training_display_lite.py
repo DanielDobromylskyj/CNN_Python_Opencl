@@ -2,10 +2,94 @@ import tkinter as tk
 import threading
 import time
 import datetime
+import sys
+import subprocess
+import os
+import hashlib
+
+import tkinter as tk
+from evdev import InputDevice, categorize, ecodes, list_devices
+import threading
+import os
+import sys
+
 
 import device_info
 
+import builtins
+
+log_path = "output.log"
+log_file = open(log_path, "a")
+
+def print(*args, **kwargs):
+    builtins.print(*args, **kwargs, file=log_file)
+    log_file.flush()
+
+print("\n\n--- Script started ---")
+
 device = device_info.get_device_info()  # Only has AMD support (that is tested) + Linux uses ROCm
+os.environ["PYOPENCL_CTX"] = ''
+
+def check_password(password):
+    return hashlib.sha256(password.encode()).digest() == b'\x16Y@\x94\n\x02\xa1\x87\xe4F?\xf4g\t\t0\x03\x8cZ\xf8\xfc&\x10{\xf3\x01\xe7\x14\xf5\x99\xa1\xda'
+
+
+def require_root():
+    if os.geteuid() != 0:
+        script_path = os.path.abspath(__file__)
+        script_dir = os.path.dirname(script_path)
+
+        env = os.environ.copy()
+        display = env.get("DISPLAY")
+        xauth = env.get("XAUTHORITY")
+
+        if not display or not xauth:
+            print("Missing DISPLAY or XAUTHORITY. Cannot launch GUI.")
+            sys.exit(1)
+
+        process = subprocess.Popen([
+            'pkexec',
+            'env',
+            f'DISPLAY={display}',
+            f'XAUTHORITY={xauth}',
+            'bash',
+            '-c',
+            f'cd "{script_dir}" && {sys.executable} "{script_path}"'
+        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+        # Read output (optional live)
+        out, err = process.communicate()
+        print("STDOUT:", out)
+        print("STDERR:", err)
+        sys.exit()
+
+
+class Device:
+    def __init__(self, device):
+        self.device = device
+
+    def grab(self):
+        return self.device.grab()
+
+    def read_loop(self):
+        return self.device.read_loop()
+
+    def ungrab(self):
+        return self.device.ungrab()
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, type, value, traceback):
+        return self.ungrab()
+
+def find_keyboard():
+    for path in list_devices():
+        dev = InputDevice(path)
+        if "keyboard" in dev.name.lower():
+            return Device(dev)
+    return None
+
 
 
 class Utilisation:
@@ -23,7 +107,7 @@ class Utilisation:
 
 # noinspection PyAttributeOutsideInit
 class Display(tk.Tk):
-    def __init__(self, net=None):
+    def __init__(self, net=None, lock=False):
         super().__init__()
 
         self.net = net
@@ -31,13 +115,23 @@ class Display(tk.Tk):
         self.net_eta = "N/A"
         self.net_finish_eta = "N/A"
 
+        self.unlock_pin = ""
+
         self.title("Network Monitor")
         self.configure(bg="#121212")
-        self.geometry("1000x450")
+        self.geometry("1000x500")
         self.resizable(False, False)
 
-        self.main_frame = tk.Frame(self, bg="#121212")
-        self.main_frame.pack(fill="both", expand=True)
+        self.is_locked = lock
+        self.lock_keyboard = None
+
+        if lock is True:
+            #self.attributes('-fullscreen', True)
+            #self.geometry("1920x1080")
+            self.lock()
+
+        self.main_frame = tk.Frame(self, bg="#121212", width=1000)
+        self.main_frame.pack()
 
         self.left_frame = tk.Frame(self.main_frame, bg="#121212", width=500)
         self.left_frame.pack(side="left", fill="y", padx=10, pady=10)
@@ -45,7 +139,7 @@ class Display(tk.Tk):
         self.middle_frame = tk.Frame(self.main_frame, bg="#121212", width=200)
         self.middle_frame.pack(side="left", fill="y", padx=10, pady=10)
 
-        self.right_frame = tk.Frame(self.main_frame, bg="#1e1e1e", width=200)
+        self.right_frame = tk.Frame(self.main_frame, bg="#1e1e1e", width=500)
         self.right_frame.pack(side="right", fill="both", expand=True, padx=10, pady=10)
         self.right_frame.pack_propagate(False)
 
@@ -55,12 +149,47 @@ class Display(tk.Tk):
 
         self.update_stats()
 
+    def unlock(self):
+        """Unblocks keyboard and mouse input."""
+        self.destroy()
+        self.quit()
+
+        raise Exception("GET ME OUTA HERE")
+
+    def password_manager(self, device):
+        device.grab()
+
+        print("Grabbed device")
+
+        with device:
+            for event in device.read_loop():
+                print("EVENT", event.type, event)
+                if event.type == ecodes.EV_KEY:
+                    self.key_press(event)
+
+
+    def key_press(self, event):
+        print("keypress", event)
+        if event.char in "01234567891012":
+            self.unlock_pin += event.char
+
+        if event.char == '\r':
+            print("Password Check:", check_password(self.unlock_pin))
+            if check_password(self.unlock_pin):
+                self.unlock()
+
+            self.unlock_pin = ""
+
+
+    def lock(self):
+        require_root()
+
     def update_eta(self):
         if self.net is not None:
             epoch, max_epoches, _, _ = self.net.get_extra_display_data()
             self.net_eta_history.append((epoch, time.time()))
 
-            if len(self.net_eta_history) > 20:
+            if len(self.net_eta_history) > 50:
                 self.net_eta_history.pop(0)
 
             e1, t1 = self.net_eta_history[0]
@@ -161,12 +290,14 @@ class Display(tk.Tk):
         self.gpu_power_label = self.make_stat_label(self.power_box, "GPU: --W")
         self.gpu_power = Utilisation(device.get_gpu_power)
 
+        self.after(5000, self.unlock)
+
     def create_graph_panel(self):
         title = tk.Label(self.right_frame, text="Epoch vs Error", font=("Segoe UI", 12, "bold"),
                          fg="white", bg="#1e1e1e", width=420)
         title.pack(anchor="n", pady=5)
 
-        self.graph_canvas = tk.Canvas(self.right_frame, bg="#2e2e2e", height=350, width=450, highlightthickness=0)
+        self.graph_canvas = tk.Canvas(self.right_frame, bg="#2e2e2e", height=340, width=450, highlightthickness=0)
         self.graph_canvas.pack(pady=10)
 
         self.datapoints = [0]
@@ -268,7 +399,31 @@ class Display(tk.Tk):
         self.after(200, self.update_stats)
 
     def run(self):
-        self.mainloop()
+        print("Running")
+        if self.is_locked:
+            print("As Locked")
+            self.focus_force()
+
+            keyboard = find_keyboard()
+            if not keyboard:
+                print("No keyboard found.")
+                sys.exit(1)
+
+            t = threading.Thread(target=self.password_manager, args=(keyboard, ), daemon=True)
+            t.start()
+
+            try:
+                print("Main loop")
+                self.mainloop()
+                device.ungrab()
+
+            except:
+                device.ungrab()
+                raise
+
+
+        else:
+            self.mainloop()
 
     @staticmethod
     def create_and_run(*args, **kwargs):
@@ -278,7 +433,7 @@ class Display(tk.Tk):
 
     @staticmethod
     def launch_threaded(*args, **kwargs):
-        threading.Thread(target=Display.create_and_run, args=args, kwargs=kwargs).start()
+        threading.Thread(target=Display.create_and_run, args=args, kwargs=kwargs, daemon=True).start()
 
 
 if __name__ == "__main__":
@@ -288,6 +443,10 @@ if __name__ == "__main__":
 
     import numpy as np
 
+    USE_LOCK = True
+
+    if not os.geteuid() != 0 and USE_LOCK:
+        print("READY")
     a, b = np.random.random((100, 100)), np.random.random((100, 100))
 
     training_data = [
@@ -302,6 +461,6 @@ if __name__ == "__main__":
 
     net.save("display_lite_test.pyn")
 
-    Display.launch_threaded(net)
+    Display.launch_threaded(net, lock=False)
 
-    net.train(training_data, training_data, 500, 0.001)
+    net.train(training_data, training_data, 500, -0.001, show_stats=False)

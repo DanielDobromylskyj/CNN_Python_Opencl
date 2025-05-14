@@ -7,6 +7,11 @@ __kernel void rotate_180(__global float* buffer, int width, int height) {
     int x = get_global_id(0);
     int y = get_global_id(1);
 
+    if (y > height / 2 || (y == height / 2 && x >= width / 2)) {
+        return;  // Skip mirrored half
+    }
+
+
     int offset_index = index(width - x - 1, height - y - 1, width);
     int true_index = index(x, y, width);
 

@@ -168,7 +168,7 @@ class ConvolutedLayer(Layer):
         self.forward_core = load_core("kernel")
 
         # Don't spend computing power generating weights to just overwrite them when loading.
-        # todo - clean up this init data ffs its a mess
+        # todo - clean up this init data ffs it's a mess
         self.weights = [
             NetworkBuffer(relu_weight_init((self.get_weight_count(),), self.get_weight_count()) if not testing else
                                     np.full(self.get_weight_count(), testing[0], dtype=np.float32),

@@ -59,7 +59,7 @@ class ADAM:  # Adaptive Momentum Estimation
         self.v = np.zeros(shape, dtype=np.float32)  # Second moment (v_t)
 
     def optimise(self, parameters, gradients):
-        """ Performs calculations to controll the paramters of the network"""
+        """ Performs calculations to control the parameters of the network"""
         gradients = gradients.get_as_array()
 
         for param in range(len(parameters)):

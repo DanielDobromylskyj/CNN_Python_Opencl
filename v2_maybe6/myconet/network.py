@@ -22,6 +22,18 @@ class Network:
                 )
 
 
+    def capture_forward(self, inputs):  # Use for training, returns extra data
+        return  # todo
+
+    def forward(self, inputs):  # Not for training. Optimised for speed, use capture_forward(input)
+        input_buffer: buffer.NetworkBuffer = buffer.create_network_buffer_from_input(inputs)
+
+        for layer in self.layout:
+            input_buffer = layer.forward(input_buffer)
+        
+        return input_buffer.get_as_array
+
+
     def save(self, path):
         open(path, "w").close()  # truncate
 

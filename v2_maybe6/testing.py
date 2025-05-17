@@ -1,8 +1,8 @@
-from myconet.layer import fully_connected
+from myconet.layer.fully_connected import FullyConnected
 from myconet.network import Network
 
 net = Network((
-    fully_connected.FullyConnected(100, 100, 0),
+    FullyConnected(100, 100, 0),
 ))
 
 

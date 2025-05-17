@@ -23,7 +23,7 @@ class Network:
             if layer.__class__.__name__ not in self.__kernels:
                 self.__kernels[layer.__class__.__name__] = (
                     load_kernel(layer.get_kernel_name()),
-                    load_training_kernel(layer.get_training_kernel_name()) if load_training_kernels else None
+                    load_training_kernel(layer.get_kernel_name()) if load_training_kernels else None
                 )
 
     def validate_layout(self):

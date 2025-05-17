@@ -89,7 +89,8 @@ class LayerCodes:
         """ Shorthand codes for layer types (Used for storage)"""
         self.__code_to_layer = {
             "FP": FullyConnectedLayer,
-            "CV": ConvolutedLayer
+            "CV": ConvolutedLayer,
+            "MP": MaxPooling
         }
 
         self.__layer_to_code = {v: k for k, v in self.__code_to_layer.items()}
@@ -130,18 +131,44 @@ class Layer:
         raise NotImplementedError
 
 
+class MaxPooling(Layer):
+    def __init__(self, input_size, size):
+        self.__input_size = input_size
+        self.__size = size
+
+    def get_total_nodes_in(self):
+        raise NotImplementedError("Layer does not have a implemented 'get_total_nodes_in' method")
+
+    def get_total_nodes_out(self):
+        raise NotImplementedError("Layer does not have a implemented 'get_total_nodes_out' method")
+
+    def apply_gradients(self, weight_gradients: Gradients | BufferList, bias_gradients: Gradients | BufferList,
+                        count: int) -> None:
+        pass
+
+    def serialize(self):
+        return f"{self.__input_size}..{self.__size}".encode()
+
+    @staticmethod
+    def deserialize(data):
+        input_size, size = data.decode().split("..")
+
+        return MaxPooling(eval(input_size), eval(size))
+
+
 class ConvolutedLayer(Layer):
     def __init__(self, input_size: tuple[int, int], kernel_size: tuple[int, int], filter_count: int,
-                 colour_depth: int = 1, loading: bool = False, testing=None):  # todo - allow for sigmoid / other activations
+                 colour_depth: int = 1, stride: int = 1, loading: bool = False, testing=None):  # todo - allow for sigmoid / other activations
         self.__filter_count = filter_count
         self.__input_size = input_size
         self.__kernel_size = kernel_size
         self.__colour_depth = colour_depth
+        self.__stride = stride
 
         self.forward_core = load_core("kernel")
 
         # Don't spend computing power generating weights to just overwrite them when loading.
-        # todo - clean up this init data ffs its a mess
+        # todo - clean up this init data ffs it's a mess
         self.weights = [
             NetworkBuffer(relu_weight_init((self.get_weight_count(),), self.get_weight_count()) if not testing else
                                     np.full(self.get_weight_count(), testing[0], dtype=np.float32),
@@ -173,7 +200,7 @@ class ConvolutedLayer(Layer):
         kernel_size = self.get_true_kernel_shape()
         input_size = self.get_true_input_shape()
 
-        return math.ceil(input_size[0] / kernel_size[0]), math.ceil(input_size[1] / kernel_size[1])
+        return math.ceil((input_size[0] - kernel_size[0]) / self.__stride), math.ceil((input_size[1] - kernel_size[1]) / self.__stride)
 
     def get_output_size(self) -> int:
         """ Returns the size of the output - Used for network validation """
@@ -209,7 +236,7 @@ class ConvolutedLayer(Layer):
         biases = self.biases[filter_index]
 
         # maybe this could be optimised, as we are writing an empty buffer to the gpu, instead of just making an empty gpu buffer
-        output = NetworkBuffer(np.zeros(self.get_output_size(), dtype=np.float32), self.get_output_size())
+        output = NetworkBuffer(np.zeros(self.get_output_size(), dtype=np.float32), (self.get_output_size(),))
 
         filter_shape = self.get_true_kernel_shape()
         input_shape = self.get_true_input_shape()
@@ -219,7 +246,7 @@ class ConvolutedLayer(Layer):
                                   weights.get_as_buffer(), biases.get_as_buffer(),
                                   np.int32(filter_shape[0]), np.int32(filter_shape[1]),
                                   np.int32(input_shape[0]), np.int32(input_shape[1]),
-                                  np.int32(self.get_output_shape()[0])).wait()
+                                  np.int32(self.get_output_shape()[0]), np.int32(self.__stride)).wait()
 
         return output
 
@@ -261,6 +288,7 @@ class ConvolutedLayer(Layer):
                     np.int32(filter_shape[0]),
                     np.int32(filter_shape[1]),
                     np.int32(self.get_output_shape()[0]),
+                    np.int32(self.__stride),
                     np.float32(learning_rate)
                     ).wait()
 
@@ -330,18 +358,19 @@ class ConvolutedLayer(Layer):
             base64.b64encode(
                 bias.get_as_array().tobytes()
             ) for bias in self.biases
-        ]) + f"..{self.__filter_count}..{self.__input_size}..{self.__kernel_size}..{self.__colour_depth}".encode()
+        ]) + f"..{self.__filter_count}..{self.__input_size}..{self.__kernel_size}..{self.__colour_depth}..{self.__stride}".encode()
 
     @staticmethod
     def deserialize(data):
         """ Turn a string of bytes into a layer instance"""
-        weights, biases, filter_count, input_size, kernel_size, colour_depth = data.split(b"..")
+        weights, biases, filter_count, input_size, kernel_size, colour_depth, stride = data.split(b"..")
 
         layer = ConvolutedLayer(
             eval(input_size.decode()),
             eval(kernel_size.decode()),
             int(filter_count.decode()),
             int(colour_depth.decode()),
+            int(stride.decode()),
             loading=True
         )
 

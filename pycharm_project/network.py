@@ -44,8 +44,67 @@ class Network:
     def __init__(self, layout: tuple, validate_network=True):
         self.layout = layout
 
+        self.__current_epoch = 0
+        self.__max_epochs = 0
+
+        self.__current_sample_count = 0
+        self.__max_sample_count = 0
+
+        self.__current_sample_progress = 0
+        self.__max_sample_progress = 0
+
+        self.__epoch_error = 0
+        self.__epoch_errors = []
+
         if validate_network:
             validate_network_layout(self.layout)
+
+    def get_network_mem_size(self):
+        size_bytes = 0
+        for layer in self.layout:
+            if isinstance(layer, layers.FullyConnectedLayer) or isinstance(layer, layers.ConvolutedLayer):
+                size_bytes += layer.get_weight_count() * 4  # float32
+                size_bytes += layer.get_bias_count() * 4 # float32
+                size_bytes += layer.get_output_size() * 4 # float32
+                size_bytes += layer.get_input_size() * 4 # float32
+
+        return size_bytes
+
+    def get_gpu_buffer_size(self):
+        size_bytes = 0
+        for layer in self.layout:
+            if isinstance(layer, layers.FullyConnectedLayer) or isinstance(layer, layers.ConvolutedLayer):
+                size_bytes += layer.get_weight_count() * 4  # float32
+                size_bytes += layer.get_bias_count() * 4 # float32
+                size_bytes += layer.get_output_size() * 4 # float32
+
+        return size_bytes
+
+
+    def get_neuron_count(self) -> str:
+        neurons = 0
+        for layer in self.layout:
+            if isinstance(layer, layers.FullyConnectedLayer) or isinstance(layer, layers.ConvolutedLayer):
+                neurons += layer.get_weight_count()
+
+        if len(str(neurons)) > 5:
+            return  f"{neurons:.2e}"
+
+
+        return str(neurons)
+
+    def get_bias_count(self) -> str:
+        bias = 0
+        for layer in self.layout:
+            if isinstance(layer, layers.FullyConnectedLayer) or isinstance(layer, layers.ConvolutedLayer):
+                bias += layer.get_bias_count()
+
+        if len(str(bias)) > 5:
+            return  f"{bias:.2e}"
+
+
+        return str(bias)
+
 
     def forward_pass(self, inputs, save_layer_data=False,
                      for_display=False):
@@ -98,12 +157,17 @@ class Network:
 
         raise ValueError(f"Could not ensure data is a network buffer or convert to one\nData:\n{data}")
 
-    def backward_pass(self, inputs: np.ndarray, target: np.ndarray, learning_rate: float):
+    def backward_pass(self, inputs: np.ndarray, target: np.ndarray, learning_rate: float, index=None):
+        if index:
+            self.__current_sample_count = index
+
         data = self.forward_pass(inputs, save_layer_data=True)
         """ Performs a backward pass though the network for gradient calculations """
         outputs = data[-1][0].get_as_array()
 
         error = target - outputs
+
+        self.__epoch_error += sum([abs(err) for err in error]) / len(error)
 
         output_error_gradients = self.__convert_to_gradients(error.astype(np.float32))
 
@@ -156,12 +220,19 @@ class Network:
             for layer_gradients in total_gradients_to_sum
         ]
 
+    def get_error_history(self):
+        return self.__epoch_errors
+
     def compute_epoch(self, training_data, learning_rate: float):
         """ Performs a training cycle for each piece of training data"""
+        self.__epoch_error = 0
+
         gradient_data = [
-            self.backward_pass(sample, target, learning_rate)
-            for sample, target in training_data
+            self.backward_pass(sample, target, learning_rate, index=i)
+            for i, (sample, target) in enumerate(training_data)
         ]
+
+        self.__epoch_errors.append(self.__epoch_error)
 
         weight_gradients = self.__condense_gradients(gradient_data, 0)
         bias_gradients = self.__condense_gradients(gradient_data, 1)
@@ -192,10 +263,22 @@ class Network:
 
         return round(sum(errors) / tests, decimals), round(min(errors), decimals), round(max(errors), decimals)
 
+    def get_display_data(self):
+        return (self.__current_epoch / self.__max_epochs), (self.__current_sample_count / self.__max_sample_count), 0
+
+    def get_extra_display_data(self):
+        return self.__current_epoch, self.__max_epochs, self.__current_sample_count, self.__max_sample_count,
+
+
     def train(self, training_data, test_data, epochs, learning_rate, show_stats=True):
         start = time.time()
 
+        self.__max_epochs = epochs
+
         for epoch in range(epochs):
+            self.__current_epoch = epoch
+            self.__max_sample_count = len(training_data)
+
             self.compute_epoch(training_data, learning_rate)
 
             elapsed = time.time() - start
@@ -271,7 +354,8 @@ if __name__ == "__main__":
     import viewer
 
     net = Network((
-        layers.FullyConnectedLayer(1, 1, activations.ReLU, testing=[1, 0], ADAM_data=[0.9, 0.999]),
+        layers.ConvolutedLayer((10, 10), (2, 2), filter_count=3, colour_depth=1, stride=2),
+        layers.FullyConnectedLayer(48, 2, activations.ReLU)
     ))
 
     net.save("test.pyn")
@@ -280,17 +364,17 @@ if __name__ == "__main__":
 
     print("made network")
 
+    a, b = np.random.random((100, 100)), np.random.random((100, 100))
+
     training_data = [
-        [np.array([2]), np.array([4])],
-        [np.array([1]), np.array([2])],
-        [np.array([3]), np.array([6])],
-        [np.array([0]), np.array([0])],
+        [a, np.array([1, 0])],
+        [b, np.array([0, 1])],
     ]
 
     v = viewer.viewer()
 
     for i in range(50):
-        net.train(training_data, training_data, 200, 0.01)
+        net.train(training_data, training_data, 500, 0.005)
         print()
 
         for point in training_data:

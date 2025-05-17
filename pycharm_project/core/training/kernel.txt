@@ -12,13 +12,13 @@ inline float derivative_sigmoid(float x) {
 __kernel void filter(__global float *input_error, __global float *weights, __global float *biases,
                      __global float *output_error, __global float *input_values, __global float *output_values,
                      __global float *weight_nudges, __global float *bias_nudges,
-                     int input_width, int input_height, int filter_width, int filter_height, int filter_horizontal_count, float learning_rate) {
+                     int input_width, int input_height, int filter_width, int filter_height, int filter_horizontal_count, int stride, float learning_rate) {
 
     int x = get_global_id(0);
     int y = get_global_id(1);
 
-    int x_index = x * filter_width;
-    int y_index = y * filter_height;
+    int x_index = x * stride;
+    int y_index = y * stride;  // 3112
 
     float output_error_value = -output_error[0]; // negative ??? index 0 ???
     for (int dx = 0; dx < filter_width; dx++) {
@@ -26,13 +26,14 @@ __kernel void filter(__global float *input_error, __global float *weights, __glo
             int input_index = ((y_index + dy) * input_width) + (x_index + dx);
             int error_out_index = y * filter_width + x;
 
-            float weight_error = input_values[input_index] * output_error_value * learning_rate;
+            float weight_error = 0.0;
+            if (((x_index + dx) > input_width) && ((y_index + dy) > input_height)) {
+                weight_error = input_values[input_index] * output_error_value * learning_rate;
+            }
+
             weight_nudges[input_index] = weight_error;
 
             float error = output_error_value * weights[input_index];
-
-            //printf("%f %f", output_error_value, weights[input_index]);
-
             input_error[input_index] = error;
        }
     }

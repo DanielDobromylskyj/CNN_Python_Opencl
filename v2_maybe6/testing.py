@@ -2,7 +2,8 @@ from myconet.layer.fully_connected import FullyConnected
 from myconet.network import Network
 
 net = Network((
-    FullyConnected(100, 100, 0),
+    FullyConnected(100, 50, 0),
+    FullyConnected(50, 2, 0),
 ))
 
 

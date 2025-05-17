@@ -1,4 +1,3 @@
-
 import pyopencl as cl
 import numpy as np
 
@@ -23,7 +22,7 @@ def combine_buffers(buffers):  # todo - find a better / faster way of doing this
 
 
 def convert_gradients_to_buffer_list(buffer, chunk_size):
-    """ Helper function to converts gradients to a buffer list object for easier usage"""
+    """ Helper function to convert gradients to a buffer list object for easier usage"""
     data = buffer.get_as_array()
     chunks = [Gradients(data[i:i + chunk_size]) for i in range(0, len(data), chunk_size)]
     return BufferList(chunks)
@@ -44,7 +43,7 @@ def rearrange_feature_map_output(outputs):
 
 
 class NetworkBuffer:
-    def __init__(self, data: np.ndarray, shape: tuple[int]):
+    def __init__(self, data: np.ndarray, shape: tuple[int, ...]):
         self.__buffer = cl.Buffer(ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, data.nbytes, hostbuf=data)
         self.__shape = shape
 

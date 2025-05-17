@@ -1,4 +1,5 @@
-from . import file_api
+from .core.load import load_kernel, load_training_kernel
+from . import file_api, buffer
 from .layer import loader
 
 class InvalidNetwork(Exception):
@@ -7,15 +8,28 @@ class InvalidNetwork(Exception):
 
 class Network:
     def __init__(self, layout: tuple, verify=True):
+        self.__kernels = {}
         self.layout = layout
 
         if verify:
             self.validate_layout()
 
+        self.__ready_kernels()
+
+    def __ready_kernels(self, load_training_kernels=False):
+        self.__kernels = {}
+
+        for layer in self.layout:
+            if layer.__class__.__name__ not in self.__kernels:
+                self.__kernels[layer.__class__.__name__] = (
+                    load_kernel(layer.get_kernel_name()),
+                    load_training_kernel(layer.get_training_kernel_name()) if load_training_kernels else None
+                )
+
     def validate_layout(self):
         for i in range(len(self.layout) - 1):
-            nodes_out = self.layout[i].get_node_count()[0]
-            nodes_in = self.layout[i + 1].get_node_count()[1]
+            nodes_out = self.layout[i].get_node_count()[1]
+            nodes_in = self.layout[i + 1].get_node_count()[0]
             if nodes_in != nodes_out:
                 raise InvalidNetwork(
                     f"Layout Invalid -> Layer {i+1} outputs {nodes_out}, Yet Layer {i+2} takes {nodes_in} inputs."
@@ -34,6 +48,10 @@ class Network:
         return input_buffer.get_as_array
 
 
+    def train(self, training_data, learning_rate):
+        self.__ready_kernels(load_training_kernels=True)
+        # todo
+
     def save(self, path):
         open(path, "w").close()  # truncate
 
@@ -48,7 +66,6 @@ class Network:
 
     @staticmethod
     def load(path):
-        layout = []
         with open(path, 'rb') as f:
             layer_count = file_api.decode_int(f)
 

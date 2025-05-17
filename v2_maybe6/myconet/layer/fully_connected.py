@@ -1,12 +1,12 @@
 import numpy as np
 
 from .default import DefaultLayer
-from .. import buffer
 from .. import file_api
+from .. import buffer
 
 
 class FullyConnected(DefaultLayer):
-    def __init__(self, input_size, output_size, activation, is_loading=False):
+    def __init__(self, input_size: int, output_size: int, activation, is_loading=False):
         super(FullyConnected, self).__init__()
 
         self.__input_size = input_size
@@ -23,6 +23,8 @@ class FullyConnected(DefaultLayer):
             (output_size,)
         ) if not is_loading else None
 
+    def get_node_count(self):
+        return self.__input_size, self.__output_size
 
     def save(self, file):
         file_api.encode_dict({
@@ -45,3 +47,6 @@ class FullyConnected(DefaultLayer):
         return layer
 
 
+    @staticmethod
+    def get_kernel_name():
+        return "full_pop"

@@ -21,3 +21,6 @@ class DefaultLayer:
     def load(file):
         raise NotImplementedError("Class has not implemented deserialize")
 
+    @staticmethod
+    def get_kernel_name():
+        raise NotImplementedError("Class has not implemented get_kernel_name method, Unknown kernel required")

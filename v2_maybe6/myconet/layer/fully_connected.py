@@ -8,38 +8,88 @@ from ..buffer import NetworkBuffer
 
 class FullyConnected(DefaultLayer):
     def __init__(self, input_size: int, output_size: int, activation, is_loading=False):
-        super(FullyConnected, self).__init__()
+        super().__init__()
 
         self.__input_size = input_size
         self.__output_size = output_size
         self.__activation = activation
+        self.__is_loading = is_loading
+
+        self.weights = None
+        self.bias = None
+
+    def init_values(self):
+        if not self._cl:
+            raise NotInitializedError("No OpenCL (cl) parsed before attempting to initialize")
+
+        if self.__is_loading:
+            return  # do not init
 
         self.weights = buffer.NetworkBuffer(
-            np.ones((input_size, output_size), dtype=np.float32),  # todo
-            (input_size, output_size)
-        ) if not is_loading else None
+            self._cl,
+            np.ones((self.__input_size, self.__output_size), dtype=np.float32),  # todo
+            (self.__input_size, self.__output_size)
+        )
 
         self.bias = buffer.NetworkBuffer(
-            np.zeros((output_size,), dtype=np.float32),  # todo
-            (output_size,)
-        ) if not is_loading else None
+            self._cl,
+            np.zeros((self.__output_size,), dtype=np.float32),  # todo
+            (self.__output_size,)
+        )
+
 
     def get_node_count(self):
         return self.__input_size, self.__output_size
 
     def forward(self, inputs: NetworkBuffer):
-        outputs = buffer.create_empty_buffer(self.__output_size)
-
+        outputs = buffer.create_empty_buffer(self._cl, self.__output_size)
+        unreduced_outputs = buffer.create_empty_buffer(self._cl, self.__output_size * self.__input_size)
 
         self.execute_forward_kernel("forward",
             (self.__input_size, self.__output_size),
             inputs.get_as_buffer(),
-            outputs.get_as_buffer(),
+            unreduced_outputs.get_as_buffer(),
             self.weights.get_as_buffer(),
             np.int32(self.__input_size)
         )
 
-        print(outputs.get_as_array())
+        self.execute_forward_kernel("reduce_outputs",
+            (self.__output_size, ),
+            unreduced_outputs.get_as_buffer(),
+            outputs.get_as_buffer(),
+            self.bias.get_as_buffer(),
+            np.int32(self.__input_size),
+            np.int32(self.__output_size),
+            np.int32(self.__activation),
+        )
+
+        return outputs
+
+    def forward_train(self, inputs: NetworkBuffer):
+        outputs = buffer.create_empty_buffer(self._cl, self.__output_size)
+        unactivated_outputs = buffer.create_empty_buffer(self._cl, self.__output_size)
+        unreduced_outputs = buffer.create_empty_buffer(self._cl, self.__output_size * self.__input_size)
+
+        self.execute_forward_kernel("forward",
+                                    (self.__input_size, self.__output_size),
+                                    inputs.get_as_buffer(),
+                                    unreduced_outputs.get_as_buffer(),
+                                    self.weights.get_as_buffer(),
+                                    np.int32(self.__input_size)
+                                    )
+
+        self.execute_training_kernel("reduce_outputs_forward",
+                                    (self.__output_size,),
+                                    unreduced_outputs.get_as_buffer(),
+                                     outputs.get_as_buffer(),
+                                     unactivated_outputs.get_as_buffer(),
+                                     self.bias.get_as_buffer(),
+                                     np.int32(self.__input_size),
+                                     np.int32(self.__output_size),
+                                     np.int32(self.__activation),
+                                    )
+
+        return outputs, unactivated_outputs, unreduced_outputs
 
     def save(self, file):
         file_api.encode_dict({
@@ -53,11 +103,11 @@ class FullyConnected(DefaultLayer):
 
 
     @staticmethod
-    def load(file):
+    def load(cl, file):
         data = file_api.decode_dict(file)
         layer = FullyConnected(input_size=data["input_size"], output_size=data["output_size"], activation=data["activation"], is_loading=True)
-        layer.weights = buffer.NetworkBuffer(data["weights"], (data["input_size"], data["output_size"]))
-        layer.bias = buffer.NetworkBuffer(data["biases"], (data["output_size"],))
+        layer.weights = buffer.NetworkBuffer(cl, data["weights"], (data["input_size"], data["output_size"]))
+        layer.bias = buffer.NetworkBuffer(cl, data["biases"], (data["output_size"],))
 
         return layer
 

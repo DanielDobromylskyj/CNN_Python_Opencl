@@ -1,14 +1,20 @@
 from ..buffer import NetworkBuffer
-import pyopencl as cl
+import pyopencl as pycl
 
 
 class DefaultLayer:
     def __init__(self):
-        self.__queue = None
-        self.__kernels: tuple[None | cl.Program, ...] = (None, None)
+        self._cl = None
+        self.__kernels: tuple[None | pycl.Program, ...] = (None, None)
+
+    def init_values(self):
+        raise NotImplementedError("Class has no init_values function")
 
     def forward(self, inputs: NetworkBuffer):
         raise NotImplementedError("Class has not implemented forward method")
+
+    def forward_train(self, inputs: NetworkBuffer):
+        raise NotImplementedError("Class has not implemented forward (Training) method")
 
     def backward(self, inputs: NetworkBuffer):
         raise NotImplementedError("Class has not implemented backward method")
@@ -20,29 +26,27 @@ class DefaultLayer:
         raise NotImplementedError("Class has not implemented serialize")
 
     @staticmethod
-    def load(file):
+    def load(cl, file):
         raise NotImplementedError("Class has not implemented deserialize")
 
     @staticmethod
     def get_kernel_name():
         raise NotImplementedError("Class has not implemented get_kernel_name method, Unknown kernel required")
 
-    def set_kernels(self, kernels):
+    def set_kernels(self, cl, kernels):
         self.__kernels = kernels
-
-    def set_queue(self, queue):
-        self.__queue = queue
+        self._cl = cl
 
     def execute_forward_kernel(self, function_name, shape, *args):
         if self.__kernels[0] is None:
             raise ValueError("No Forward kernel available / loaded.")
 
         kernel = getattr(self.__kernels[0], function_name)
-        kernel(self.__queue, shape, None, *args)
+        kernel(self._cl.queue, shape, None, *args)
 
     def execute_training_kernel(self, function_name, shape, *args):
         if self.__kernels[1] is None:
             raise ValueError("No Training kernel available / loaded.")
 
         kernel = getattr(self.__kernels[1], function_name)
-        kernel(self.__queue, shape, None, *args)
+        kernel(self._cl.queue, shape, None, *args)

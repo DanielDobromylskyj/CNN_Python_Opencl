@@ -14,6 +14,41 @@ inline float clip(float value, float clip_value) {
     return fmin(fmax(value, -clip_value), clip_value);
 }
 
+__kernel void reduce_outputs_forward(__global float* unreduced_outputs,
+                             __global float* reduced_outputs,
+                             __global float* unactivated_outputs,
+                             __global float* biases,
+                             int input_size, int output_size,
+                             int activation_type) {
+
+    int output_index = get_global_id(0);
+
+    float local_sum = 0.0; // the indexing here I think is wrong
+    for (int input_index = 0; input_index < input_size; input_index++) {
+        int array_index = output_index * input_size + input_index;
+        local_sum += unreduced_outputs[array_index];
+    }
+
+    local_sum += biases[output_index];
+    unactivated_outputs[output_index] = local_sum;
+
+    float activated = 0.0;
+    switch (activation_type) {
+            case 1:  // ReLU
+                activated = relu(local_sum);
+                break;
+            case 2:  // Sigmoid
+                activated = sigmoid(local_sum);
+                break;
+            default: // Default
+                activated = local_sum;
+                break;
+    }
+
+    reduced_outputs[output_index] = activated;
+}
+
+
 // REMEMBER THAT WE ARE WORKING BACKWARDS. SO OUR "inputs" ARE THE RIGHT SIDE NODES OF A LAYER
 __kernel void backwards(
         __global float* left_hand_nodes,

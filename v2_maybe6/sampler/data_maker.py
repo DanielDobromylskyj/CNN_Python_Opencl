@@ -207,8 +207,8 @@ class LoadedSample:
         self.data = data
         self.output = output
 
-    def __array__(self):
-        return self.data, np.array([self.output[0], 0 if self.output[0] == 1 else 1], dtype=np.float32)
+    def __array__(self, dtype=None):
+        return np.array(self.data, dtype=dtype)
 
 
 class TrainingSample:
@@ -233,12 +233,11 @@ class TrainingSample:
 
             self.data = self.data.astype(dtype=np.float32) / 255
 
-
-    def __array__(self):
+    def __array__(self, dtype=None):
         if not self.data:  # Panic cos we haven't loaded it yet :)
             self.load(jit=True)
 
-        return self.data, np.array([self.output[0], 0 if self.output[0] == 1 else 1], dtype=np.float32)
+        return np.array(self.data, dtype=dtype)
 
 
 def write_to_cache(path, data):

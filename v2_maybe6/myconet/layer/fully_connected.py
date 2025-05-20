@@ -3,6 +3,7 @@ import numpy as np
 from .default import DefaultLayer
 from .. import file_api
 from .. import buffer
+from ..buffer import NetworkBuffer
 
 
 class FullyConnected(DefaultLayer):
@@ -25,6 +26,20 @@ class FullyConnected(DefaultLayer):
 
     def get_node_count(self):
         return self.__input_size, self.__output_size
+
+    def forward(self, inputs: NetworkBuffer):
+        outputs = buffer.create_empty_buffer(self.__output_size)
+
+
+        self.execute_forward_kernel("forward",
+            (self.__input_size, self.__output_size),
+            inputs.get_as_buffer(),
+            outputs.get_as_buffer(),
+            self.weights.get_as_buffer(),
+            np.int32(self.__input_size)
+        )
+
+        print(outputs.get_as_array())
 
     def save(self, file):
         file_api.encode_dict({

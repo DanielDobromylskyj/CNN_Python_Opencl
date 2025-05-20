@@ -42,6 +42,11 @@ def rearrange_feature_map_output(outputs):
     return BufferList(input_gradients), BufferList(weight_gradients), BufferList(bias_gradients)
 
 
+def create_empty_buffer(shape):
+    data = np.empty(shape, dtype=np.float32)
+    return NetworkBuffer(data, shape)
+
+
 class NetworkBuffer:
     def __init__(self, data: np.ndarray, shape: tuple[int, ...]):
         self.__buffer = cl.Buffer(ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, data.nbytes, hostbuf=data)

@@ -16,6 +16,7 @@ class Network:
 
         self.__ready_kernels()
 
+
     def __ready_kernels(self, load_training_kernels=False):
         self.__kernels = {}
 
@@ -25,6 +26,10 @@ class Network:
                     load_kernel(layer.get_kernel_name()),
                     load_training_kernel(layer.get_kernel_name()) if load_training_kernels else None
                 )
+
+            layer.set_kernels(self.__kernels[layer.__class__.__name__])
+            layer.set_queue(sel)
+
 
     def validate_layout(self):
         for i in range(len(self.layout) - 1):
@@ -39,18 +44,20 @@ class Network:
     def capture_forward(self, inputs):  # Use for training, returns extra data
         return  # todo
 
+
     def forward(self, inputs):  # Not for training. Optimised for speed, use capture_forward(input)
         input_buffer: buffer.NetworkBuffer = buffer.create_network_buffer_from_input(inputs)
 
         for layer in self.layout:
             input_buffer = layer.forward(input_buffer)
         
-        return input_buffer.get_as_array
+        return input_buffer.get_as_array()
 
 
     def train(self, training_data, learning_rate):
         self.__ready_kernels(load_training_kernels=True)
         # todo
+
 
     def save(self, path):
         open(path, "w").close()  # truncate
@@ -64,6 +71,7 @@ class Network:
                 )
                 layer.save(f)
 
+
     @staticmethod
     def load(path):
         with open(path, 'rb') as f:
@@ -75,6 +83,3 @@ class Network:
             ])
 
         return Network(layout)
-
-
-

@@ -1,14 +1,17 @@
+import numpy as np
+
 from myconet.layer.fully_connected import FullyConnected
 from myconet.network import Network
 
+# I have royally fucked this project. Good luck future me. Im going to bed
+
+
 net = Network((
-    FullyConnected(100, 50, 0),
-    FullyConnected(50, 2, 0),
+    FullyConnected(1, 3, 0),
+    FullyConnected(3, 2, 0),
 ))
 
 
-net.save("testnet.pyn")
+output = net.forward(np.array([2]))
 
-net2 = Network.load("testnet.pyn")
-print(net2.layout)
 

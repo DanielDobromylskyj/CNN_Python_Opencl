@@ -1,13 +1,23 @@
+import pyopencl as cl
+
 from .core.load import load_kernel, load_training_kernel
 from . import file_api, buffer
 from .layer import loader
+
 
 class InvalidNetwork(Exception):
     pass
 
 
+class OpenCL_Instance:
+    def __init__(self):
+        self.ctx = cl.create_some_context()
+        self.queue = cl.CommandQueue(self.ctx)
+
+
 class Network:
     def __init__(self, layout: tuple, verify=True):
+        self.cl = OpenCL_Instance()
         self.__kernels = {}
         self.layout = layout
 

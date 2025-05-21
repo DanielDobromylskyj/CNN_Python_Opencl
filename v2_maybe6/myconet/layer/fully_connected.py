@@ -91,6 +91,39 @@ class FullyConnected(DefaultLayer):
 
         return outputs, unactivated_outputs, unreduced_outputs
 
+    def backward(self, input_values: np.ndarray, error_gradients: NetworkBuffer, values: list, learning_rate: float):
+        outputs, unactivated_outputs, unreduced_outputs = values
+
+        layer_errors_unreduced = buffer.create_empty_buffer(self._cl, self.__input_size * self.__output_size)
+        layer_errors_reduced = buffer.create_empty_buffer(self._cl, self.__input_size)
+
+        weight_gradients = buffer.create_empty_buffer(self._cl, self.__input_size * self.__input_size)
+        bias_gradients = buffer.create_empty_buffer(self._cl, self.__output_size)
+
+        self.execute_training_kernel(
+            "backward",
+            (self.__input_size, self.__output_size),
+            NetworkBuffer(self._cl, input_values, input_values.shape).get_as_buffer(),
+            outputs.get_as_buffer(),
+            unactivated_outputs.get_as_buffer(),
+            self.weights.get_as_buffer(),
+            error_gradients.get_as_buffer(),
+
+            layer_errors_unreduced.get_as_buffer(),
+            weight_gradients.get_as_buffer(),
+            bias_gradients.get_as_buffer(),
+
+            np.int32(self.__output_size),
+            np.int32(self.__input_size),
+            np.int32(self.__activation),
+            np.float32(learning_rate)
+        )
+
+        self.execute_training_kernel(
+            "reduce_input_error_gradients",
+            (self.__input_size, ),  # todo
+        )
+
     def save(self, file):
         file_api.encode_dict({
             "input_size" : self.__input_size,

@@ -73,6 +73,14 @@ class NetworkBuffer:
         pycl.enqueue_copy(self.__cl.queue, output, self.get_as_buffer()).wait()
         return output
 
+    def release(self):
+        self.__buffer.release()
+
+    def get_and_release(self):
+        array = self.get_as_array()
+        self.release()
+        return array
+
     def __add__(self, other):
         if isinstance(other, NetworkBuffer) or isinstance(other, Gradients):
             return NetworkBuffer(self.__cl, self.get_as_array() + other.get_as_array(), self.__shape)

@@ -16,7 +16,7 @@ class DefaultLayer:
     def forward_train(self, inputs: NetworkBuffer):
         raise NotImplementedError("Class has not implemented forward (Training) method")
 
-    def backward(self, inputs: NetworkBuffer):
+    def backward(self, input_values: NetworkBuffer, error_gradients: NetworkBuffer, values: list, learning_rate: float):
         raise NotImplementedError("Class has not implemented backward method")
 
     def get_node_count(self):

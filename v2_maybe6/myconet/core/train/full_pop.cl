@@ -1,3 +1,7 @@
+inline float relu(float x) {
+    return fmax(0.0f, x);
+}
+
 inline float sigmoid(float x) {
     return 1.0f / (1.0f + exp(-x));
 }
@@ -55,11 +59,10 @@ __kernel void backwards(
         __global float* right_hand_nodes_activated,
         __global float* right_hand_nodes_unactivated,
         __global float* weights,
-        __global float* biases,
         __global float* right_hand_nodes_error_gradients, // left_hand_nodes_error_gradients_unreduced
         __global float* left_hand_nodes_error_gradients_unreduced, // Same size as the weights, so we can "reduce" it later for our final output
         __global float* weight_gradients,
-        __global float* bias_gradients_unreduced,
+        __global float* bias_gradients,
         int right_hand_nodes_size, int left_hand_nodes_size, int activation_type,
         float learning_rate
 ) {
@@ -88,16 +91,18 @@ __kernel void backwards(
     int weight_index = left_hand_index * left_hand_nodes_size + right_hand_index;
 
     weight_gradients[weight_index] = clip(weight_gradient, 1.0f);
-    bias_gradients_unreduced[right_hand_index] = delta * learning_rate;
     left_hand_nodes_error_gradients_unreduced[weight_index] = clip(weights[weight_index] * delta, 0.5f);
 
+    if (left_hand_index == 0) {
+        bias_gradients[right_hand_index] = delta * learning_rate;
+    }
 }
 
 __kernel void reduce_input_error_gradients(
         __global float *pre_summed,    // Full array of input errors (for each input-output pair)
         __global float *summed,        // Summed error for each input node
-        int input_size,                // Number of input nodes
-        int output_size                // Number of output nodes
+        int input_size,
+        int output_size
 ) {
     int input_index = get_global_id(0);
 
@@ -114,25 +119,4 @@ __kernel void reduce_input_error_gradients(
     }
 
     summed[input_index] = local_sum;
-}
-
-__kernel void reduce_bias_gradients(
-        __global float *pre_summed,    // Full array of input errors (for each input-output pair)
-        __global float *summed,        // Summed error for each input node
-        int input_size,                // Number of input nodes
-        int output_size                // Number of output nodes
-) {
-    int output_index = get_global_id(0);
-
-    float local_sum = 0.0f;
-
-    for (int input_index = 0; input_index < input_size; input_index++) {
-        int pre_summed_index = output_index * input_size + input_index;
-
-        float value = pre_summed[pre_summed_index];
-        local_sum += value;
-    }
-
-    // Fucked, returning NaN. So I just removed it - seems to work again?
-    summed[output_index] = local_sum;
 }

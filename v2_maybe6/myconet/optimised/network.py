@@ -1,10 +1,11 @@
 import pyopencl as cl
 import numpy as np
 
-from .core.load import load_kernel, load_training_kernel
-from . import file_api, buffer
-from .layer import loader
+from ..core.load import load_kernel, load_training_kernel
+from .. import file_api, buffer
+from ..layer import loader
 
+#  todo
 
 class InvalidNetwork(Exception):
     pass
@@ -27,7 +28,6 @@ class Network:
             self.validate_layout()
 
         self.__ready_kernels()
-
 
     def __ready_kernels(self, load_training_kernels=False):
         self.__kernels = {}
@@ -52,20 +52,6 @@ class Network:
                 )
 
 
-    def capture_forward(self, input_buffer: buffer.NetworkBuffer):  # Use for training, returns extra data
-        extra_data = []
-        node_values = [input_buffer.get_as_array()]
-
-        for layer in self.layout:
-            values = layer.forward_train(input_buffer)
-            input_buffer = values[0]
-
-            extra_data.append(values)
-            node_values.append(values[0].get_as_array())
-
-        return input_buffer.get_as_array(), extra_data, node_values
-
-
     def forward(self, inputs):  # Not for training. Optimised for speed, use capture_forward(input)
         input_buffer: buffer.NetworkBuffer = buffer.create_network_buffer_from_input(self.cl, inputs)
 
@@ -74,34 +60,8 @@ class Network:
         
         return input_buffer.get_as_array()
 
-
-    def backward(self, inputs: np.ndarray, target: np.ndarray, learning_rate: float):
-        inputs = buffer.create_network_buffer_from_input(self.cl, inputs)
-
-        output, backprop_data, layer_node_values = self.capture_forward(inputs)
-
-        layer_error = target - output
-        error_gradient = buffer.NetworkBuffer(self.cl, layer_error, output.shape)
-
-        backprop_gradients = []
-
-        for i in range(len(self.layout)):
-            layer_index = len(self.layout) - i - 1
-            layer = self.layout[layer_index]
-
-            next_error_gradient, weight_gradients, bias_gradients = layer.backward(
-                layer_node_values[layer_index],
-                error_gradient,
-                backprop_data[layer_index],
-                learning_rate
-            )
-
-            error_gradient = next_error_gradient
-            backprop_gradients.append([
-                weight_gradients.get_and_release(),  # Store the weights on the CPU side only to save VRAM
-                bias_gradients.get_and_release()
-            ])
-
+    def backward(self, inputs: buffer.NetworkBuffer, target: np.ndarray):
+        output, backprop_data = self.capture_forward(inputs)
 
     def train(self, training_data, learning_rate):
         self.__ready_kernels(load_training_kernels=True)

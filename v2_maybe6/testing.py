@@ -18,7 +18,9 @@ data = load_training_data(
 )
 
 print("loaded data")
-out = net.forward([4, 1])
+
+net.train(3,3)  # bodge, to load Training kernel
+out = net.backward([4, 1], [5], 0.1)
 print("Output:", out)
 
 

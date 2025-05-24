@@ -87,11 +87,12 @@ __kernel void backwards(
 
     float delta = right_hand_nodes_error_gradients[right_hand_index] * derivative;
     float weight_gradient = delta * left_hand_nodes[left_hand_index] * learning_rate;
+    printf("%f %f %f %f\n", weight_gradient, delta, left_hand_nodes[left_hand_index], derivative);
 
     int weight_index = left_hand_index * left_hand_nodes_size + right_hand_index;
 
     weight_gradients[weight_index] = clip(weight_gradient, 1.0f);
-    left_hand_nodes_error_gradients_unreduced[weight_index] = clip(weights[weight_index] * delta, 0.5f);
+    left_hand_nodes_error_gradients_unreduced[weight_index] = clip(weights[weight_index] * delta, 1.0f);
 
     if (left_hand_index == 0) {
         bias_gradients[right_hand_index] = delta * learning_rate;

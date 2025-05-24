@@ -101,7 +101,7 @@ class FullyConnected(DefaultLayer):
         bias_gradients = buffer.create_empty_buffer(self._cl, self.__output_size)
 
         self.execute_training_kernel(
-            "backward",
+            "backwards",
             (self.__input_size, self.__output_size),
             NetworkBuffer(self._cl, input_values, input_values.shape).get_as_buffer(),
             outputs.get_as_buffer(),
@@ -121,8 +121,14 @@ class FullyConnected(DefaultLayer):
 
         self.execute_training_kernel(
             "reduce_input_error_gradients",
-            (self.__input_size, ),  # todo
+            (self.__input_size, ),
+            layer_errors_unreduced.get_as_buffer(),
+            layer_errors_reduced.get_as_buffer(),
+            np.int32(self.__output_size),
+            np.int32(self.__input_size)
         )
+
+        return layer_errors_reduced, weight_gradients, bias_gradients
 
     def save(self, file):
         file_api.encode_dict({

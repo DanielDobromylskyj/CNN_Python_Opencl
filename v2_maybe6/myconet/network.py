@@ -5,6 +5,8 @@ from .core.load import load_kernel, load_training_kernel
 from . import file_api, buffer
 from .layer import loader
 
+from .optimisers import standard
+
 
 class InvalidNetwork(Exception):
     pass
@@ -27,6 +29,7 @@ class Network:
             self.validate_layout()
 
         self.__ready_kernels()
+        self.__optimiser = standard.Optimiser(self)
 
 
     def __ready_kernels(self, load_training_kernels=False):
@@ -74,6 +77,22 @@ class Network:
         
         return input_buffer.get_as_array()
 
+    @staticmethod
+    def __average_grads(data):
+        averaged = []
+
+        for i in range(num_items):
+            # Stack the i-th pair from all batches
+            a_stack = np.stack([batch[i][0] for batch in data])  # All arrA_i across batches
+            b_stack = np.stack([batch[i][1] for batch in data])  # All arrB_i across batches
+
+            # Take the mean over the batch dimension (axis=0)
+            avg_a = np.mean(a_stack, axis=0)
+            avg_b = np.mean(b_stack, axis=0)
+
+            averaged.append([avg_a, avg_b])
+
+        return averaged
 
     def backward(self, inputs: np.ndarray, target: np.ndarray, learning_rate: float):
         inputs = buffer.create_network_buffer_from_input(self.cl, inputs)
@@ -81,7 +100,7 @@ class Network:
         output, backprop_data, layer_node_values = self.capture_forward(inputs)
 
         layer_error = target - output
-        error_gradient = buffer.NetworkBuffer(self.cl, layer_error, output.shape)
+        error_gradient = buffer.NetworkBuffer(self.cl, layer_error.astype(np.float32), output.shape)
 
         backprop_gradients = []
 
@@ -102,6 +121,13 @@ class Network:
                 bias_gradients.get_and_release()
             ])
 
+        return backprop_gradients
+
+    def set_optimiser(self, optimiser):
+        self.__optimiser = optimiser(self)
+
+    def apply_gradients(self, gradients):
+        self.__optimiser.apply_gradients(gradients)
 
     def train(self, training_data, learning_rate):
         self.__ready_kernels(load_training_kernels=True)

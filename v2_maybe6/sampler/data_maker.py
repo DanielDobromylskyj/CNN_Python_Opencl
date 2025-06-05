@@ -234,7 +234,7 @@ class TrainingSample:
             self.data = self.data.astype(dtype=np.float32) / 255
 
     def __array__(self, dtype=None):
-        if not self.data:  # Panic cos we haven't loaded it yet :)
+        if self.data is None:  # Panic cos we haven't loaded it yet :)
             self.load(jit=True)
 
         return np.array(self.data, dtype=dtype)

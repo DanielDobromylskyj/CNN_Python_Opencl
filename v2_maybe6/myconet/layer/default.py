@@ -1,6 +1,11 @@
 from ..buffer import NetworkBuffer
 import pyopencl as pycl
 
+import math
+import itertools
+from functools import reduce
+from operator import mul
+
 
 class DefaultLayer:
     def __init__(self):
@@ -41,12 +46,20 @@ class DefaultLayer:
         if self.__kernels[0] is None:
             raise ValueError("No Forward kernel available / loaded.")
 
+        print("Executing Forward kernel:", function_name, shape)
+
         kernel = getattr(self.__kernels[0], function_name)
-        kernel(self._cl.queue, shape, None, *args)
+        self.__execute_kernel(kernel, shape, *args)
 
     def execute_training_kernel(self, function_name, shape, *args):
         if self.__kernels[1] is None:
             raise ValueError("No Training kernel available / loaded.")
 
+        print("Executing Training kernel:", function_name, shape)
+
         kernel = getattr(self.__kernels[1], function_name)
-        kernel(self._cl.queue, shape, None, *args)
+        self.__execute_kernel(kernel, shape, *args)
+
+    def __execute_kernel(self, kernel, shape, *args):
+        kernel(self._cl.queue, shape, None, *args)  # May need with batch executing with enqueue kernel range.
+        self._cl.queue.flush()

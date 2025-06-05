@@ -87,7 +87,7 @@ __kernel void backwards(
 
     float delta = right_hand_nodes_error_gradients[right_hand_index] * derivative;
     float weight_gradient = delta * left_hand_nodes[left_hand_index] * learning_rate;
-    printf("%f %f %f %f\n", weight_gradient, delta, left_hand_nodes[left_hand_index], derivative);
+    //printf("%f %f %f %f\n", weight_gradient, delta, left_hand_nodes[left_hand_index], derivative);
 
     int weight_index = left_hand_index * left_hand_nodes_size + right_hand_index;
 
@@ -99,25 +99,3 @@ __kernel void backwards(
     }
 }
 
-__kernel void reduce_input_error_gradients(
-        __global float *pre_summed,    // Full array of input errors (for each input-output pair)
-        __global float *summed,        // Summed error for each input node
-        int input_size,
-        int output_size
-) {
-    int input_index = get_global_id(0);
-
-    float local_sum = 0.0f;
-    for (int output_index = 0; output_index < output_size;output_index++) {
-        int pre_summed_index = output_index * input_size + input_index;
-
-        if (isnan(pre_summed[pre_summed_index])) {
-            printf("Found NaN While summing. Index: %d. Input Index: %d", pre_summed_index, input_index);
-        }
-
-        float value = pre_summed[pre_summed_index];
-        local_sum += value;
-    }
-
-    summed[input_index] = local_sum;
-}

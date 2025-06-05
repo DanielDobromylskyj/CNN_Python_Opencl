@@ -3,8 +3,8 @@ from sampler.data_maker import load_training_data, get_cache_dir
 from myconet.network import Network
 
 net = Network((
-    FullyConnected(1, 1, 1),
-    FullyConnected(1, 1, 1),
+    FullyConnected(30000, 50, 1),
+    FullyConnected(50, 1, 1),
 ))
 
 
@@ -18,10 +18,11 @@ data = load_training_data(
 )
 
 print("loaded data")
+test_sample = data[0]
 
-net.train(3,3)  # bodge, to load Training kernel
+print("Score (Pre):", net.score(test_sample, test_sample.output))
 
-out = net.backward([1], [2], 0.1)
-print("Output:", out)
+net.train(data[:2], [], 1, 0.1)
 
+print("Score (Aft):", net.score(test_sample, test_sample.output))
 

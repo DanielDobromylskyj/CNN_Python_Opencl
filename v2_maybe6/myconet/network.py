@@ -1,5 +1,6 @@
 import pyopencl as cl
 import numpy as np
+import os
 
 from .core.load import load_kernel, load_training_kernel
 from . import file_api, buffer
@@ -10,6 +11,7 @@ from .optimisers import standard
 
 class InvalidNetwork(Exception):
     pass
+
 
 
 class OpenCL_Instance:
@@ -33,6 +35,7 @@ class Network:
 
 
     def __ready_kernels(self, load_training_kernels=False):
+        kernels_previously_loaded = self.__kernels != {}
         self.__kernels = {}
 
         for layer in self.layout:
@@ -43,7 +46,9 @@ class Network:
                 )
 
             layer.set_kernels(self.cl, self.__kernels[layer.__class__.__name__])
-            layer.init_values()
+
+            if not kernels_previously_loaded:
+                layer.init_values()
 
     def validate_layout(self):
         for i in range(len(self.layout) - 1):
@@ -79,18 +84,21 @@ class Network:
 
     @staticmethod
     def __average_grads(data):
-        averaged = []
+        sample_count = len(data)
+        layer_count = len(data[0])
 
-        for i in range(num_items):
-            # Stack the i-th pair from all batches
-            a_stack = np.stack([batch[i][0] for batch in data])  # All arrA_i across batches
-            b_stack = np.stack([batch[i][1] for batch in data])  # All arrB_i across batches
+        averaged = data[0]
 
-            # Take the mean over the batch dimension (axis=0)
-            avg_a = np.mean(a_stack, axis=0)
-            avg_b = np.mean(b_stack, axis=0)
+        for i in range(sample_count-1):
+            layers = data[i+1]
 
-            averaged.append([avg_a, avg_b])
+            for layerIndex, layer in enumerate(layers):
+                averaged[layerIndex][0] += layer[0]
+                averaged[layerIndex][1] += layer[1]
+
+        for layerIndex in range(layer_count):
+            averaged[layerIndex][0] /= sample_count
+            averaged[layerIndex][1] /= sample_count
 
         return averaged
 
@@ -129,9 +137,25 @@ class Network:
     def apply_gradients(self, gradients):
         self.__optimiser.apply_gradients(gradients)
 
-    def train(self, training_data, learning_rate):
+    def score(self, inputs, targets):
+        outputs = self.forward(inputs)
+
+        return sum([
+            abs(error) for error in outputs - targets
+        ])
+
+
+    def train(self, training_data, validation_data, epoches, learning_rate):  # todo - add validation
         self.__ready_kernels(load_training_kernels=True)
-        # todo
+
+        for epoch in range(epoches):
+            gradients = [
+                self.backward(sample, sample.output, learning_rate)
+                for sample in training_data
+            ]
+
+            averaged_gradients = self.__average_grads(gradients)
+            self.apply_gradients(averaged_gradients)
 
 
     def save(self, path):

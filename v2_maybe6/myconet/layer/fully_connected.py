@@ -20,15 +20,15 @@ class FullyConnected(DefaultLayer):
 
     def init_values(self):
         if not self._cl:
-            raise NotInitializedError("No OpenCL (cl) parsed before attempting to initialize")
+            raise Exception("No OpenCL (cl) parsed before attempting to initialize")
 
         if self.__is_loading:
             return  # do not init
 
         self.weights = buffer.NetworkBuffer(
             self._cl,
-            np.ones((self.__input_size, self.__output_size), dtype=np.float32),  # todo
-            (self.__input_size, self.__output_size)
+            np.ones((self.__input_size * self.__output_size), dtype=np.float32),  # todo
+            (self.__input_size * self.__output_size, )
         )
 
         self.bias = buffer.NetworkBuffer(
@@ -95,9 +95,8 @@ class FullyConnected(DefaultLayer):
         outputs, unactivated_outputs, unreduced_outputs = values
 
         layer_errors_unreduced = buffer.create_empty_buffer(self._cl, self.__input_size * self.__output_size)
-        layer_errors_reduced = buffer.create_empty_buffer(self._cl, self.__input_size)
 
-        weight_gradients = buffer.create_empty_buffer(self._cl, self.__input_size * self.__input_size)
+        weight_gradients = buffer.create_empty_buffer(self._cl, self.__input_size * self.__output_size)
         bias_gradients = buffer.create_empty_buffer(self._cl, self.__output_size)
 
         self.execute_training_kernel(
@@ -119,14 +118,10 @@ class FullyConnected(DefaultLayer):
             np.float32(learning_rate)
         )
 
-        self.execute_training_kernel(
-            "reduce_input_error_gradients",
-            (self.__input_size, ),
-            layer_errors_unreduced.get_as_buffer(),
-            layer_errors_reduced.get_as_buffer(),
-            np.int32(self.__output_size),
-            np.int32(self.__input_size)
-        )
+        # Using CPU cos doing this on the GPU is a PAIN with float32 (or anything but ints)
+        pre_summed = layer_errors_unreduced.get_as_array().reshape((self.__output_size, self.__input_size))
+        summed = pre_summed.sum(axis=0).astype(np.float32) # Sum along output dimension -> result shape: (input_size, )
+        layer_errors_reduced = buffer.NetworkBuffer(self._cl, summed, (self.__input_size,))
 
         return layer_errors_reduced, weight_gradients, bias_gradients
 

@@ -7,9 +7,24 @@ from functools import reduce
 from operator import mul
 
 
+def chunk_ranges(global_size, max_sizes):
+    chunks = []
+    for i, size in enumerate(global_size):
+        max_size = max_sizes[i] if i < len(max_sizes) else max_sizes[-1]
+        # Split size into chunks of max_size
+        chunk_list = []
+        start = 0
+        while start < size:
+            chunk_list.append((start, min(max_size, size - start)))
+            start += max_size
+        chunks.append(chunk_list)
+    return chunks
+
+
 class DefaultLayer:
     def __init__(self):
         self._cl = None
+        self.log = None
         self.__kernels: tuple[None | pycl.Program, ...] = (None, None)
 
     def init_values(self):
@@ -38,6 +53,9 @@ class DefaultLayer:
     def get_kernel_name():
         raise NotImplementedError("Class has not implemented get_kernel_name method, Unknown kernel required")
 
+    def set_logger(self, logger):
+        self.log = logger
+
     def set_kernels(self, cl, kernels):
         self.__kernels = kernels
         self._cl = cl
@@ -46,7 +64,7 @@ class DefaultLayer:
         if self.__kernels[0] is None:
             raise ValueError("No Forward kernel available / loaded.")
 
-        print("Executing Forward kernel:", function_name, shape)
+        self.log.debug("Executing Forward kernel:", function_name, shape)
 
         kernel = getattr(self.__kernels[0], function_name)
         self.__execute_kernel(kernel, shape, *args)
@@ -55,7 +73,7 @@ class DefaultLayer:
         if self.__kernels[1] is None:
             raise ValueError("No Training kernel available / loaded.")
 
-        print("Executing Training kernel:", function_name, shape)
+        self.log.debug("Executing Training kernel:", function_name, shape)
 
         kernel = getattr(self.__kernels[1], function_name)
         self.__execute_kernel(kernel, shape, *args)

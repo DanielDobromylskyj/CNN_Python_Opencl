@@ -5,6 +5,7 @@ import os
 from .core.load import load_kernel, load_training_kernel
 from . import file_api, buffer
 from .layer import loader
+from .logger import Logger
 
 from .optimisers import standard
 
@@ -15,19 +16,37 @@ class InvalidNetwork(Exception):
 
 
 class OpenCL_Instance:
-    def __init__(self):
+    def __init__(self, log):
         self.ctx = cl.create_some_context()
         self.queue = cl.CommandQueue(self.ctx)
+
+        device = self.ctx.devices[0]
+        log.debug(f"Created OpenCL Context")
+        log.debug(f"Device: {device.name}")
+        log.debug(f"Vendor: {device.vendor}")
+        log.debug(f"Version: {device.version}")
+        log.debug(f"Driver Version: {device.driver_version}")
+        log.debug(f"Max Compute Units: {device.max_compute_units}")
+        log.debug(f"Max Work Group Size: {device.max_work_group_size}")
+        log.debug(f"Max Work Item Dimensions: {device.max_work_item_dimensions}")
+        log.debug(f"Max Work Item Sizes: {device.max_work_item_sizes}")
+        log.debug(f"Global Memory Size: {device.global_mem_size // (1024 * 1024)} MB")
+        log.debug(f"Local Memory Size: {device.local_mem_size // 1024} KB")
+        log.debug(f"Max Constant Buffer Size: {device.max_constant_buffer_size // 1024} KB")
+        log.debug(f"Max Allocatable Memory: {device.max_mem_alloc_size // (1024 * 1024)} MB")
+        log.debug(f"Extensions: {device.extensions}")
 
 
 
 class Network:
-    def __init__(self, layout: tuple, verify=True, cl_instance=None):
-        self.cl = OpenCL_Instance() if not cl_instance else cl_instance
+    def __init__(self, layout: tuple, verify=True, cl_instance=None, log_level=0):
+        self.log = Logger(log_level)
+        self.cl = OpenCL_Instance(self.log) if not cl_instance else cl_instance
         self.__kernels = {}
         self.layout = layout
 
         if verify:
+            self.log.debug("Verifying Network Layout")
             self.validate_layout()
 
         self.__ready_kernels()
@@ -35,6 +54,7 @@ class Network:
 
 
     def __ready_kernels(self, load_training_kernels=False):
+        self.log.debug(f"Loading Kernels (Loading Training Kernels = {load_training_kernels})")
         kernels_previously_loaded = self.__kernels != {}
         self.__kernels = {}
 
@@ -45,6 +65,7 @@ class Network:
                     load_training_kernel(self.cl, layer.get_kernel_name()) if load_training_kernels else None
                 )
 
+            layer.set_logger(self.log)
             layer.set_kernels(self.cl, self.__kernels[layer.__class__.__name__])
 
             if not kernels_previously_loaded:

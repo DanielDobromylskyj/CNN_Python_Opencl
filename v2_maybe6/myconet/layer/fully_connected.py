@@ -70,6 +70,7 @@ class FullyConnected(DefaultLayer):
         unactivated_outputs = buffer.create_empty_buffer(self._cl, self.__output_size)
         unreduced_outputs = buffer.create_empty_buffer(self._cl, self.__output_size * self.__input_size)
 
+        self.log.debug("Training forward -> Forward Kernel")
         self.execute_forward_kernel("forward",
                                     (self.__input_size, self.__output_size),
                                     inputs.get_as_buffer(),
@@ -78,6 +79,7 @@ class FullyConnected(DefaultLayer):
                                     np.int32(self.__input_size)
                                     )
 
+        self.log.debug("Training forward -> Deducing Outputs")
         self.execute_training_kernel("reduce_outputs_forward",
                                     (self.__output_size,),
                                     unreduced_outputs.get_as_buffer(),
@@ -99,6 +101,21 @@ class FullyConnected(DefaultLayer):
         weight_gradients = buffer.create_empty_buffer(self._cl, self.__input_size * self.__output_size)
         bias_gradients = buffer.create_empty_buffer(self._cl, self.__output_size)
 
+        self.log.true_debug(f"Unreduced Errors Buffer Size: {layer_errors_unreduced.get_shape()}")
+        self.log.true_debug(f"Weight Buffer Size: {weight_gradients.get_shape()}")
+        self.log.true_debug(f"Bias Buffer Size: {bias_gradients.get_shape()}")
+
+        self.log.true_debug(f"Unreduced Outputs Buffer Size: {unreduced_outputs.get_shape()}")
+        self.log.true_debug(f"Unactivated Outputs Buffer Size: {unactivated_outputs.get_shape()}")
+        self.log.true_debug(f"Outputs Buffer Size: {outputs.get_shape()}")
+
+        self.log.true_debug(f"Input Values Shape: {input_values.shape}")
+        self.log.true_debug(f"Output Size: {self.__output_size}, Input Size: {self.__input_size}")
+        self.log.true_debug(f"Activation: {self.__activation}, Learning Rate: {learning_rate}")
+
+        self.log.true_debug(f"Kernel Shape: {(self.__input_size, self.__output_size)}")
+
+        self.log.debug("Training backwards -> Backwards Kernel")
         self.execute_training_kernel(
             "backwards",
             (self.__input_size, self.__output_size),
@@ -117,6 +134,8 @@ class FullyConnected(DefaultLayer):
             np.int32(self.__activation),
             np.float32(learning_rate)
         )
+
+        self.log.debug("Training backwards -> Summing Errors")
 
         # Using CPU cos doing this on the GPU is a PAIN with float32 (or anything but ints)
         pre_summed = layer_errors_unreduced.get_as_array().reshape((self.__output_size, self.__input_size))

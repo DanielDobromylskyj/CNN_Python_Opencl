@@ -5,7 +5,7 @@ from myconet.network import Network
 net = Network((
     FullyConnected(30000, 50, 1),
     FullyConnected(50, 1, 1),
-))
+), log_level=3)
 
 
 print(get_cache_dir())

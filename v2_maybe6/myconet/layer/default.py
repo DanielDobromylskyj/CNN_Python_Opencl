@@ -42,11 +42,11 @@ class DefaultLayer:
     def get_node_count(self):
         raise NotImplementedError("Class has not implemented get_node_count method")
 
-    def save(self, file):
+    def save(self, file, compress):
         raise NotImplementedError("Class has not implemented serialize")
 
     @staticmethod
-    def load(cl, file):
+    def load(cl, file, compressed):
         raise NotImplementedError("Class has not implemented deserialize")
 
     @staticmethod

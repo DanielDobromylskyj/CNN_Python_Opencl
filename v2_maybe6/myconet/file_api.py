@@ -1,5 +1,20 @@
 import numpy as np
+import lz4.frame
 import struct
+
+
+def compress(data):
+    return lz4.frame.compress(data)
+
+def decompress(data):
+    return lz4.frame.decompress(data)
+
+
+def encode_intx(v, length, file):
+    file.write(v.to_bytes(length, byteorder="little"))
+
+def decode_intx(length, file):
+    return int.from_bytes(file.read(length), byteorder="little")
 
 
 def encode_number(v: int, file):
@@ -42,19 +57,28 @@ def encode_bool(v: bool, file):
 def decode_bool(file):
     return bool(int.from_bytes(file.read(1), byteorder="little"))
 
-def encode_ndarray(v: np.ndarray, file):
+def encode_ndarray(v: np.ndarray, file, should_compress=False):
     encode_tuple(v.shape, file)
     encode_str(str(v.dtype), file)
 
     data = v.tobytes()
     encode_number(len(data), file)
+
+    if should_compress:
+        data = compress(data)
+
     file.write(data)
 
-def decode_ndarray(file):
+def decode_ndarray(file, is_compress=False):
     shape = decode_tuple(file)
     dtype = np.dtype(decode_str(file))
 
-    return np.frombuffer(file.read(decode_int(file)), dtype=dtype).reshape(shape)
+    raw = file.read(decode_int(file))
+
+    if is_compress:
+        raw = decompress(raw)
+
+    return np.frombuffer(raw, dtype=dtype).reshape(shape)
 
 def encode_list(v: list, file):
     values = {i: v[i] for i in range(len(v))}
@@ -96,7 +120,7 @@ def length_encode(data: bytes):
 def length_decode(data: bytes):
     return int.from_bytes(data[:8], byteorder="little")
 
-def decode_dict(file):
+def decode_dict(file, is_compressed=False):
     pair_amount = decode_int(file)
     loaded_dict = {}
 
@@ -109,13 +133,16 @@ def decode_dict(file):
         if value_type is dict:
             value = decode_dict(file)
         else:
-            value = type_lookup[value_type][2](file)
+            if value_type is np.ndarray and is_compressed:
+                value = type_lookup[value_type][2](file, True)
+            else:
+                value = type_lookup[value_type][2](file)
 
         loaded_dict[key] = value
 
     return loaded_dict
 
-def encode_dict(dictionary: dict, file):
+def encode_dict(dictionary: dict, file, should_compress=False):
     encode_number(len(dictionary), file)
 
     for key, value in dictionary.items():
@@ -133,7 +160,11 @@ def encode_dict(dictionary: dict, file):
         if type(value) is dict:
             encode_dict(value, file)
         else:
-            type_lookup[type(value)][1](value, file)
+            if type(value) is np.ndarray and should_compress:
+                type_lookup[type(value)][1](value, file, True)
+
+            else:
+                type_lookup[type(value)][1](value, file)
 
 
 if __name__ == "__main__":

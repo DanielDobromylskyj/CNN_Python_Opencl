@@ -144,7 +144,7 @@ class FullyConnected(DefaultLayer):
 
         return layer_errors_reduced, weight_gradients, bias_gradients
 
-    def save(self, file):
+    def save(self, file, compress):
         file_api.encode_dict({
             "input_size" : self.__input_size,
             "output_size" : self.__output_size,
@@ -152,12 +152,12 @@ class FullyConnected(DefaultLayer):
 
             "weights": self.weights.get_as_array(),
             "biases" : self.bias.get_as_array(),
-        }, file)
+        }, file, compress)
 
 
     @staticmethod
-    def load(cl, file):
-        data = file_api.decode_dict(file)
+    def load(cl, file, compressed):
+        data = file_api.decode_dict(file, compressed)
         layer = FullyConnected(input_size=data["input_size"], output_size=data["output_size"], activation=data["activation"], is_loading=True)
         layer.weights = buffer.NetworkBuffer(cl, data["weights"], (data["input_size"], data["output_size"]))
         layer.bias = buffer.NetworkBuffer(cl, data["biases"], (data["output_size"],))

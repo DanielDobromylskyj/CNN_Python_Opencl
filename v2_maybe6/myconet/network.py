@@ -1,5 +1,6 @@
 import pyopencl as cl
 import numpy as np
+import time
 import os
 
 from .core.load import load_kernel, load_training_kernel
@@ -16,34 +17,44 @@ class InvalidNetwork(Exception):
 
 
 class OpenCL_Instance:
-    def __init__(self, log):
+    def __init__(self, log=None):
         self.ctx = cl.create_some_context()
         self.queue = cl.CommandQueue(self.ctx)
 
-        device = self.ctx.devices[0]
-        log.debug(f"Created OpenCL Context")
-        log.debug(f"Device: {device.name}")
-        log.debug(f"Vendor: {device.vendor}")
-        log.debug(f"Version: {device.version}")
-        log.debug(f"Driver Version: {device.driver_version}")
-        log.debug(f"Max Compute Units: {device.max_compute_units}")
-        log.debug(f"Max Work Group Size: {device.max_work_group_size}")
-        log.debug(f"Max Work Item Dimensions: {device.max_work_item_dimensions}")
-        log.debug(f"Max Work Item Sizes: {device.max_work_item_sizes}")
-        log.debug(f"Global Memory Size: {device.global_mem_size // (1024 * 1024)} MB")
-        log.debug(f"Local Memory Size: {device.local_mem_size // 1024} KB")
-        log.debug(f"Max Constant Buffer Size: {device.max_constant_buffer_size // 1024} KB")
-        log.debug(f"Max Allocatable Memory: {device.max_mem_alloc_size // (1024 * 1024)} MB")
-        log.debug(f"Extensions: {device.extensions}")
+        if log:
+            device = self.ctx.devices[0]
+            log.debug(f"Created OpenCL Context")
+            log.debug(f"Device: {device.name}")
+            log.debug(f"Vendor: {device.vendor}")
+            log.debug(f"Version: {device.version}")
+            log.debug(f"Driver Version: {device.driver_version}")
+            log.debug(f"Max Compute Units: {device.max_compute_units}")
+            log.debug(f"Max Work Group Size: {device.max_work_group_size}")
+            log.debug(f"Max Work Item Dimensions: {device.max_work_item_dimensions}")
+            log.debug(f"Max Work Item Sizes: {device.max_work_item_sizes}")
+            log.debug(f"Global Memory Size: {device.global_mem_size // (1024 * 1024)} MB")
+            log.debug(f"Local Memory Size: {device.local_mem_size // 1024} KB")
+            log.debug(f"Max Constant Buffer Size: {device.max_constant_buffer_size // 1024} KB")
+            log.debug(f"Max Allocatable Memory: {device.max_mem_alloc_size // (1024 * 1024)} MB")
+            log.debug(f"Extensions: {device.extensions}")
 
 
 
 class Network:
-    def __init__(self, layout: tuple, verify=True, cl_instance=None, log_level=0):
+    def __init__(self, layout: tuple, verify=True, cl_instance=None, log_level=0, load_data=None):
         self.log = Logger(log_level)
         self.cl = OpenCL_Instance(self.log) if not cl_instance else cl_instance
         self.__kernels = {}
         self.layout = layout
+
+        self.version = (2, 0)
+        self.pyn_version = (1, 2)
+
+        self.creation_date = round(time.time() * 1e9) if load_data is None else load_data["creation_date"]
+
+        self.pyn_config = {
+            "use_compression": True,
+        } if load_data is None else load_data["pyn_config"]
 
         if verify:
             self.log.debug("Verifying Network Layout")
@@ -178,25 +189,89 @@ class Network:
             averaged_gradients = self.__average_grads(gradients)
             self.apply_gradients(averaged_gradients)
 
+    def __get_layout_types(self):
+        layer_types = []
+
+        for layer in self.layout:
+            code = loader.layer_to_code(layer)
+
+            if code not in layer_types:
+                layer_types.append(code)
+
+        return layer_types
+
+    def __get_optimiser_id(self):  # todo
+        return 0
+
+    def __create_header(self, f):
+        self.log.debug("Creating header")
+        file_api.encode_intx(self.version[0], 1, f)  # Version - Major
+        file_api.encode_intx(self.version[1], 1, f)  # Version - Minor
+        self.log.debug("Added Myconet Version")
+
+
+        file_api.encode_intx(self.pyn_version[0], 1, f)  # Pyn Version - Major
+        file_api.encode_intx(self.pyn_version[1], 1, f)  # Pyn Version - Minor
+        self.log.debug("Added pyn Version")
+
+        flags = [self.pyn_config["use_compression"], 0, 0, 0, 0, 0, 0, 0]
+        flags_int = sum([2**n for n in range(8) if flags[n]])
+
+        file_api.encode_intx(flags_int, 1, f)  # Flags
+        self.log.debug("Added Config Flags")
+
+        layer_types = self.__get_layout_types()
+        layer_types_int = sum([2^x for x in layer_types])
+        file_api.encode_intx(layer_types_int, 8, f)  # All types of layer used (Checking for support)
+        self.log.debug("Added Used Layer Types")
+
+        file_api.encode_intx(self.creation_date, 8, f)  # Creation Date
+        file_api.encode_intx(self.__get_optimiser_id(), 1, f)  # Get optimiser Used  (Not yet fully supported)
+        self.log.debug("Added Misc Data")
+
+
 
     def save(self, path):
+        self.log.debug("Saving...")
         open(path, "w").close()  # truncate
 
         with open(path, 'ab') as f:
+            self.__create_header(f)
             file_api.encode_number(len(self.layout), f)
 
             for layer in self.layout:
                 file_api.encode_number(
                     loader.layer_to_code(layer), f
                 )
-                layer.save(f)
+                layer.save(f, compress=self.pyn_config["use_compression"])
+                self.log.debug("Saved Layer {}".format(layer.__class__.__name__))
 
+        print("Saved Network")
 
     @staticmethod
-    def load(path):
+    def __decode_flags(flags):
+        return [
+            flags &
+            for n in range(8)
+        ]
+
+    @staticmethod
+    def __decode_header(f):
+        myconet_version = (file_api.decode_intx(1, f), file_api.decode_intx(1, f))
+        pyn_version = (file_api.decode_intx(1, f), file_api.decode_intx(1, f))
+        flags = file_api.decode_intx(1, f)
+        layer_types = file_api.decode_intx(8, f)
+        creation_date = file_api.decode_intx(8, f)
+        optimiser_id = file_api.decode_intx(1, f)
+
+        return myconet_version, pyn_version, flags, layer_types, creation_date, optimiser_id
+
+    @staticmethod
+    def load(path, log_level=1):  # todo - update me pls
         cl_instance = OpenCL_Instance()
 
         with open(path, 'rb') as f:
+            header = Network.__decode_header(f)
             layer_count = file_api.decode_int(f)
 
             layout = tuple([
@@ -204,4 +279,4 @@ class Network:
                 for _ in range(layer_count)
             ])
 
-        return Network(layout, cl_instance=cl_instance)
+        return Network(layout, cl_instance=cl_instance, log_level=log_level)

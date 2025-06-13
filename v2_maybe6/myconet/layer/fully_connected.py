@@ -168,3 +168,11 @@ class FullyConnected(DefaultLayer):
     @staticmethod
     def get_kernel_name():
         return "full_pop"
+
+    def __str__(self):
+        return f"FullyConnected(input={self.__input_size}, output={self.__output_size}, activation={self.__activation})"
+
+    def release(self):
+        self.weights.release()
+        self.bias.release()
+

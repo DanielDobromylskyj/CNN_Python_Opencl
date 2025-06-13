@@ -11,7 +11,7 @@ def chunk_ranges(global_size, max_sizes):
     chunks = []
     for i, size in enumerate(global_size):
         max_size = max_sizes[i] if i < len(max_sizes) else max_sizes[-1]
-        # Split size into chunks of max_size
+
         chunk_list = []
         start = 0
         while start < size:
@@ -19,6 +19,8 @@ def chunk_ranges(global_size, max_sizes):
             start += max_size
         chunks.append(chunk_list)
     return chunks
+
+
 
 
 class DefaultLayer:
@@ -79,5 +81,11 @@ class DefaultLayer:
         self.__execute_kernel(kernel, shape, *args)
 
     def __execute_kernel(self, kernel, shape, *args):
-        kernel(self._cl.queue, shape, None, *args)  # May need with batch executing with enqueue kernel range.
+        kernel(self._cl.queue, shape, None, *args)
         self._cl.queue.flush()
+
+    def release(self):
+        raise NotImplementedError("Class has not implemented release")
+
+    def __str__(self):
+        return f"{self.__class__.__name__}(string_method=NotImplemented)"

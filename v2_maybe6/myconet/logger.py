@@ -73,4 +73,10 @@ class Logger:
             self.__log(self.__create_message("SOMETHING WRONG", text))
 
 
+    def close(self):
+        self.log_level = -1
+        builtins.print = self.default_print
+
+
+
 

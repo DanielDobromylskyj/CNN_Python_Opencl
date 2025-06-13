@@ -62,11 +62,11 @@ def encode_ndarray(v: np.ndarray, file, should_compress=False):
     encode_str(str(v.dtype), file)
 
     data = v.tobytes()
-    encode_number(len(data), file)
 
     if should_compress:
         data = compress(data)
 
+    encode_number(len(data), file)
     file.write(data)
 
 def decode_ndarray(file, is_compress=False):

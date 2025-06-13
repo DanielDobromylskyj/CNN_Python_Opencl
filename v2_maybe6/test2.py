@@ -9,6 +9,8 @@ net = Network((
 
 
 net.save("test_pyn_spec.pyn")
+net.release()
 
 
 net2 = Network.load("test_pyn_spec.pyn")
+print(net2)

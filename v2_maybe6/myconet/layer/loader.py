@@ -1,8 +1,10 @@
 from .fully_connected import FullyConnected
+from .convoluted import Convoluted
 
 
 lookup = {
     FullyConnected: 1,
+    Convoluted: 2,
 }
 
 def layer_to_code(layer):

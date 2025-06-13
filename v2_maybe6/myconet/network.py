@@ -251,7 +251,7 @@ class Network:
     @staticmethod
     def __decode_flags(flags):
         return [
-            flags &
+            (flags & 2^(7-n)) > 0
             for n in range(8)
         ]
 
@@ -272,11 +272,31 @@ class Network:
 
         with open(path, 'rb') as f:
             header = Network.__decode_header(f)
+            myconet_version, pyn_version, flags_int, layer_types, creation_date, optimiser_id = header
+            flags = Network.__decode_flags(flags_int)
+
+            is_compressed = flags[0]
+
             layer_count = file_api.decode_int(f)
 
             layout = tuple([
-                loader.code_to_layer(file_api.decode_int(f)).load(cl_instance, f)
+                loader.code_to_layer(file_api.decode_int(f)).load(cl_instance, f, is_compressed)
                 for _ in range(layer_count)
             ])
 
         return Network(layout, cl_instance=cl_instance, log_level=log_level)
+
+    def __str__(self):
+        inside = [str(layer) for layer in self.layout]
+        return f"Myconet.Network(\n  {'\n  '.join(inside)}\n)"
+
+    def release(self):
+        for layer in self.layout:
+            layer.release()
+
+        self.cl.queue.finish()
+
+        self.__del__()
+
+    def __del__(self):
+        self.log.close()

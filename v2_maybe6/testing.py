@@ -1,10 +1,15 @@
 from myconet.layer.fully_connected import FullyConnected
+from myconet.layer.convoluted import Convoluted
 from sampler.data_maker import load_training_data, get_cache_dir
 from myconet.network import Network
 
+
+# fixme - Backprop / Full Pop -> Not transferring back errors correctly?
+
+
 net = Network((
-    FullyConnected(30000, 50, 1),
-    FullyConnected(50, 1, 1),
+    Convoluted((100, 100, 3), (5, 5), 2, 1),
+    FullyConnected(144, 1, 1),
 ), log_level=3)
 
 

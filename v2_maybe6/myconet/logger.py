@@ -3,9 +3,11 @@ import time
 import os
 import re
 
+
 def remove_ansi_escape_codes(text):
     ansi_escape = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
     return ansi_escape.sub('', text)
+
 
 class bcolors:
     HEADER = '\033[95m'
@@ -71,7 +73,6 @@ class Logger:
         if self.log_level > 2:
             text = sep.join([str(arg) for arg in args]) + end
             self.__log(self.__create_message("SOMETHING WRONG", text))
-
 
     def close(self):
         self.log_level = -1

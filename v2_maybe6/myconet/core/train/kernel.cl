@@ -9,6 +9,7 @@ inline float sigmoid(float x) {
 
 __kernel void forward(__global float* inputs,
                       __global float* outputs,
+                      __global float* unactivated_outputs,
                       __global float* weights,
                       __global float* biases,
                       int input_width,
@@ -56,5 +57,8 @@ __kernel void forward(__global float* inputs,
                 break;
     }
 
+    unactivated_outputs[output_index] = total_sum;
     outputs[output_index] = activated;
 }
+
+

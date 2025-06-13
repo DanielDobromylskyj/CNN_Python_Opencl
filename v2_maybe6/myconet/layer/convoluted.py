@@ -1,4 +1,6 @@
-from ..buffer import NetworkBuffer
+from .default import DefaultLayer
+from ..buffer import NetworkBuffer, create_empty_buffer
+import numpy as np
 import pyopencl as pycl
 
 
@@ -9,13 +11,13 @@ def ensure_input_is_3D(shape):
     if len(shape) == 2:
         return shape[0], shape[1], 1
 
-    raise InputError("Cannot Make Convoluted Layer with input shape that is not 2D or 3D")
+    raise Exception("Cannot Make Convoluted Layer with input shape that is not 2D or 3D")
 
 def ensure_kernel_is_2D(shape):
     if len(shape) == 2:
         return shape
 
-    raise InputError("Cannot Make Convoluted Layer with kernel shape that is not 2D")
+    raise Exception("Cannot Make Convoluted Layer with kernel shape that is not 2D")
 
 def calculate_output_shape(input_shape, kernel_shape, stride):
     input_width, input_height, channels = input_shape
@@ -31,11 +33,13 @@ def ensure_stride_is_int(stride):
     if type(stride) is int:
         return stride
 
-    raise InputError("Cannot Make Convoluted Layer with stride that is not int")
+    raise Exception("Cannot Make Convoluted Layer with stride that is not int")
 
 
-class Convoluted:
+class Convoluted(DefaultLayer):
     def __init__(self, input_shape: tuple[int, int, int] | tuple[int, int], kernel_shape: tuple[int, int], stride:int, activation:int, is_loading=False):
+        super().__init__()
+
         self.__input_shape = ensure_input_is_3D(input_shape)
         self.__kernel_shape = ensure_kernel_is_2D(kernel_shape)
         self.__stride = ensure_stride_is_int(stride)
@@ -54,26 +58,66 @@ class Convoluted:
         if self.__is_loading:
             return  # do not init
 
-        self.weights = [buffer.NetworkBuffer(
-            self._cl, np.ones((self.__kernel_shape[0] * self.__kernel_shape[1]), dtype=np.float32),  # todo
-            (self.__input_size * self.__output_size,))
+        self.weights = NetworkBuffer(
+            self._cl, np.ones((self.__kernel_shape[0] * self.__kernel_shape[1] * self.__input_shape[2]), dtype=np.float32),  # todo
+            (self.__kernel_shape[0] * self.__kernel_shape[1] * self.__input_shape[2],)
+        )
 
-            for _ in range(self.____input_shape[2])  # Channels (Like RGB), We want a different weight set for each.
-            ]
-
-        self.bias = buffer.NetworkBuffer(
-            self._cl, np.zeros((self.__output_size[1] * self.__output_shape[2]), dtype=np.float32),  # todo
-            (self.__output_size,)
+        self.bias = NetworkBuffer(
+            self._cl, np.zeros((self.__output_shape[1] * self.__output_shape[2]), dtype=np.float32),  # todo
+            (self.__output_shape[1] * self.__output_shape[2],)
         )
 
     def forward(self, inputs: NetworkBuffer):
-        raise NotImplementedError("Class has not implemented forward method")
+        outputs = create_empty_buffer(self._cl, self.__output_shape[0] * self.__output_shape[1])
+
+        self.execute_forward_kernel("forward",
+                                    (self.__output_shape[0], self.__output_shape[1]),
+                                    inputs.get_as_buffer(),
+                                    outputs.get_as_buffer(),
+                                    self.weights.get_as_buffer(),
+                                    self.bias.get_as_buffer(),
+                                    np.int32(self.__input_shape[0]),
+                                    np.int32(self.__input_shape[1]),
+                                    np.int32(self.__kernel_shape[0]),
+                                    np.int32(self.__kernel_shape[1]),
+                                    np.int32(self.__output_shape[1]),  # Output shape[0] is the channel count
+                                    np.int32(self.__stride),
+                                    np.int32(self.__input_shape[2]),
+                                    np.int32(self.__activation),
+                                    )
+
+        return outputs
 
     def forward_train(self, inputs: NetworkBuffer):
-        raise NotImplementedError("Class has not implemented forward (Training) method")
+        outputs = create_empty_buffer(self._cl, self.__output_shape[0] * self.__output_shape[1])
+        unactivated_outputs = create_empty_buffer(self._cl, self.__output_shape[0] * self.__output_shape[1])
+
+        self.execute_training_kernel("forward",
+                                    (self.__output_shape[0], self.__output_shape[1]),
+                                    inputs.get_as_buffer(),
+                                     outputs.get_as_buffer(),
+                                     unactivated_outputs.get_as_buffer(),
+                                     self.weights.get_as_buffer(),
+                                     self.bias.get_as_buffer(),
+                                     np.int32(self.__input_shape[0]),
+                                     np.int32(self.__input_shape[1]),
+                                     np.int32(self.__kernel_shape[0]),
+                                     np.int32(self.__kernel_shape[1]),
+                                     np.int32(self.__output_shape[1]),  # Output shape[0] is the channel count
+                                     np.int32(self.__stride),
+                                     np.int32(self.__input_shape[2]),
+                                     np.int32(self.__activation),
+                                    )
+
+        return outputs, unactivated_outputs
 
     def backward(self, input_values: NetworkBuffer, error_gradients: NetworkBuffer, values: list, learning_rate: float):
-        raise NotImplementedError("Class has not implemented backward method")
+        outputs, unactivated_outputs = values
+
+        # todo
+
+        return None, None, None
 
     def get_node_count(self):
         return self.__input_shape[0] * self.__input_shape[1] * self.__input_shape[2], self.__output_shape[0] * self.__output_shape[1]

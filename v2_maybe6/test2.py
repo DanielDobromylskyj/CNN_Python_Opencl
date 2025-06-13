@@ -1,5 +1,4 @@
 from myconet.layer.fully_connected import FullyConnected
-from myconet.layer.convoluted import Convoluted
 from myconet.network import Network
 
 

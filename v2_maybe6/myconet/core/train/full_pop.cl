@@ -70,12 +70,12 @@ __kernel void backwards(
     int right_hand_index = get_global_id(1);
 
     float activated_value = right_hand_nodes_activated[right_hand_index];
-    float unactivated_value = right_hand_nodes_activated[right_hand_index];
+    float unactivated_value = right_hand_nodes_unactivated[right_hand_index];
 
     float derivative = 1.0f;
     switch (activation_type) {
         case 1: // ReLU activation
-            derivative = unactivated_value > 0 ? 1.0f : 0.0f;
+            derivative = activated_value > 0 ? 1.0f : 0.0f;
             break;
         case 2: // Sigmoid activation
           derivative = activated_value * (1.0f - activated_value);
@@ -91,6 +91,7 @@ __kernel void backwards(
     int weight_index = left_hand_index * right_hand_nodes_size + right_hand_index;
 
     weight_gradients[weight_index] = clip(weight_gradient, 1.0f);
+
 
     left_hand_nodes_error_gradients_unreduced[weight_index] = clip(weights[weight_index] * delta, 1.0f);
 

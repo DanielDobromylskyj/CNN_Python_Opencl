@@ -1,19 +1,20 @@
 from myconet.layer.fully_connected import FullyConnected
 from myconet.layer.convoluted import Convoluted
-from sampler.data_maker import load_training_data, get_cache_dir
 from myconet.network import Network
+
+from sampler.data_maker import load_training_data, get_cache_dir
 
 
 # fixme - Backprop / Full Pop -> Not transferring back errors correctly?
 
 
 net = Network((
-    Convoluted((100, 100, 3), (5, 5), 2, 1),
-    FullyConnected(144, 1, 1),
-), log_level=3)
+    Convoluted((100, 100, 3), (5, 5), 2, 1),  # ReLU
+    FullyConnected(144, 1, 2),  # Sigmoid
+), log_level=2)
 
 
-print(get_cache_dir())
+print("(Might Be) Loading Cache From:", get_cache_dir())
 data = load_training_data(
     "trainingPoints.txt",
     mutations_per_image=100,
@@ -23,7 +24,7 @@ data = load_training_data(
 )
 
 print("loaded data")
-test_sample = data[0]
+test_sample = data[3]
 
 print("Score (Pre):", net.score(test_sample, test_sample.output))
 

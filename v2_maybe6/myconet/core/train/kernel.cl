@@ -7,6 +7,10 @@ inline float sigmoid(float x) {
     return 1.0f / (1.0f + exp(-x));
 }
 
+inline float clip(float value, float clip_value) {
+    return fmin(fmax(value, -clip_value), clip_value);
+}
+
 __kernel void forward(__global float* inputs,
                       __global float* outputs,
                       __global float* unactivated_outputs,
@@ -121,3 +125,16 @@ __kernel void backwards(
                 int weight_index = base_weight_index + (dy * kernel_width) + dx;
                 int input_index = base_input_index + ((input_y_anchor + dy) * input_height) + (input_x_anchor + dx);
 
+                float weight_gradient = delta * inputs[input_index] * learning_rate;
+                float input_error_gradient = clip(weights[weight_index] * delta, 1.0f);  // Dont *learning rate, as this makes the gradients disappear faster (Bad)
+
+                // Here comes the silly (and probably wrong) indexing
+                int max_output_weight_size = kernel_width * kernel_height * channels;
+                int unreduced_index = (max_output_weight_size * output_index) + weight_index;  // Its the same for weights & input gradients
+
+                weight_gradients_unreduced[unreduced_index] = weight_gradient;
+                input_error_gradients_unreduced[unreduced_index] = input_error_gradient;
+            }
+        }
+    }
+}

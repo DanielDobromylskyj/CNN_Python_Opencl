@@ -61,4 +61,63 @@ __kernel void forward(__global float* inputs,
     outputs[output_index] = activated;
 }
 
+__kernel void backwards(
+            __global float* inputs,
+            __global float* outputs,
+            __global float* unactivated_outputs,
+            __global float* weights,
+            __global float* biases,
+
+            __global float* output_error_gradients,
+
+            __global float* input_error_gradients_unreduced,
+            __global float* weight_gradients_unreduced,
+            __global float* bias_gradients,
+
+            int input_width,
+            int input_height,
+            int kernel_width,
+            int kernel_height,
+            int output_width,
+            int stride,
+            int channels,
+            int activation_type,
+            float learning_rate
+) {
+    int output_x = get_global_id(0);
+    int output_y = get_global_id(1);
+
+    int output_index = output_y * output_width + output_x;
+
+    float activated_value = outputs[output_index];
+    float unactivated_value = unactivated_outputs[output_index];
+
+    float derivative = 1.0f;
+    switch (activation_type) {
+        case 1: // ReLU activation
+            derivative = activated_value > 0 ? 1.0f : 0.0f;
+            break;
+        case 2: // Sigmoid activation
+          derivative = activated_value * (1.0f - activated_value);
+           break;
+        default:
+            derivative = 1.0f; // Linear activation (default)
+            break;
+    }
+
+    float delta = output_error_gradients[output_index] * derivative;
+    bias_gradients[output_index] = delta * learning_rate;
+
+    int input_x_anchor = output_x * stride;
+    int input_y_anchor = output_y * stride;
+
+    float total_sum = biases[output_index];
+    for (int channel=0; channel<channels; channel++) {
+        int base_weight_index = kernel_width * kernel_height * channel;
+        int base_input_index = input_width * input_height * channel;
+
+        for (int dx=0; dx<kernel_width; dx++) {
+            for (int dy=0; dy<kernel_height; dy++) {
+                int weight_index = base_weight_index + (dy * kernel_width) + dx;
+                int input_index = base_input_index + ((input_y_anchor + dy) * input_height) + (input_x_anchor + dx);
 

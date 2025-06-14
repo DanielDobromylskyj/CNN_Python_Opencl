@@ -157,8 +157,8 @@ class Network:
 
             error_gradient = next_error_gradient
             backprop_gradients.append([
-                weight_gradients.get_and_release(),  # Store the weights on the CPU side only to save VRAM
-                bias_gradients.get_and_release()
+                weight_gradients.get_and_release(),  # Store the weights on the CPU side only to save GPU?
+                bias_gradients.get_and_release()     # Could make optimizers run on GPU as well? Stops data shuffling?
             ])
 
         return backprop_gradients

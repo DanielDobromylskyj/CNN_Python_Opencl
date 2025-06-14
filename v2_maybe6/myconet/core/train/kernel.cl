@@ -70,7 +70,6 @@ __kernel void backwards(
             __global float* outputs,
             __global float* unactivated_outputs,
             __global float* weights,
-            __global float* biases,
 
             __global float* output_error_gradients,
 
@@ -115,7 +114,6 @@ __kernel void backwards(
     int input_x_anchor = output_x * stride;
     int input_y_anchor = output_y * stride;
 
-    float total_sum = biases[output_index];
     for (int channel=0; channel<channels; channel++) {
         int base_weight_index = kernel_width * kernel_height * channel;
         int base_input_index = input_width * input_height * channel;

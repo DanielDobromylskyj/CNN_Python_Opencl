@@ -7,6 +7,8 @@ from sampler.data_maker import load_training_data, get_cache_dir
 
 # fixme - Backprop / Full Pop -> Not transferring back errors correctly?
 
+# todo  - Add Backprop / Convoluted weight / input reduction
+
 
 net = Network((
     Convoluted((100, 100, 3), (5, 5), 2, 1),  # ReLU
@@ -32,3 +34,4 @@ net.train(data[:2], [], 1, 0.1)
 
 print("Score (Aft):", net.score(test_sample, test_sample.output))
 
+net.release()

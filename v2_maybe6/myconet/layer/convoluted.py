@@ -69,7 +69,7 @@ class Convoluted(DefaultLayer):
         )
 
     def forward(self, inputs: NetworkBuffer):
-        outputs = create_empty_buffer(self._cl, self.__output_shape[0] * self.__output_shape[1])
+        outputs = create_empty_buffer(self._cl, self.__output_shape[1] * self.__output_shape[2])
 
         self.execute_forward_kernel("forward",
                                     (self.__output_shape[0], self.__output_shape[1]),
@@ -94,7 +94,7 @@ class Convoluted(DefaultLayer):
         unactivated_outputs = create_empty_buffer(self._cl, self.__output_shape[0] * self.__output_shape[1])
 
         self.execute_training_kernel("forward",
-                                    (self.__output_shape[0], self.__output_shape[1]),
+                                    (self.__output_shape[1], self.__output_shape[2]),
                                     inputs.get_as_buffer(),
                                      outputs.get_as_buffer(),
                                      unactivated_outputs.get_as_buffer(),
@@ -112,12 +112,48 @@ class Convoluted(DefaultLayer):
 
         return outputs, unactivated_outputs
 
-    def backward(self, input_values: NetworkBuffer, error_gradients: NetworkBuffer, values: list, learning_rate: float):
+    def backward(self, input_values: np.ndarray, error_gradients: NetworkBuffer, values: list, learning_rate: float):
         outputs, unactivated_outputs = values
 
-        # todo
+        # This is a LOT of data...
+        input_error_gradients_unreduced = create_empty_buffer(self._cl,
+                                        self.__output_shape[0] * self.__output_shape[1] * self.__output_shape[2] *
+                                        self.__kernel_shape[0] * self.__kernel_shape[1])
 
-        return None, None, None
+        weight_error_gradients_unreduced = create_empty_buffer(self._cl,
+                                                              self.__output_shape[0] * self.__output_shape[1] *
+                                                              self.__output_shape[2] *
+                                                              self.__kernel_shape[0] * self.__kernel_shape[1])
+
+        bias_gradients = create_empty_buffer(self._cl, self.__output_shape[0] * self.__output_shape[1])
+
+
+
+        self.execute_training_kernel("backwards",
+                                     (self.__output_shape[1], self.__output_shape[2]),
+                                     NetworkBuffer(self._cl, input_values, input_values.shape).get_as_buffer(),
+                                     outputs.get_as_buffer(),
+                                     unactivated_outputs.get_as_buffer(),
+                                     self.weights.get_as_buffer(),
+
+                                     error_gradients.get_as_buffer(),
+
+                                     input_error_gradients_unreduced.get_as_buffer(),
+                                     weight_error_gradients_unreduced.get_as_buffer(),
+                                     bias_gradients.get_as_buffer(),
+
+                                     np.int32(self.__input_shape[0]),
+                                     np.int32(self.__input_shape[1]),
+                                     np.int32(self.__kernel_shape[0]),
+                                     np.int32(self.__kernel_shape[1]),
+                                     np.int32(self.__output_shape[1]),  # Output shape[0] is the channel count need width
+                                     np.int32(self.__stride),
+                                     np.int32(self.__input_shape[2]),
+                                     np.int32(self.__activation),
+                                     np.float32(learning_rate),
+                                     )
+
+        return None, None, bias_gradients
 
     def get_node_count(self):
         return self.__input_shape[0] * self.__input_shape[1] * self.__input_shape[2], self.__output_shape[0] * self.__output_shape[1]

@@ -90,8 +90,8 @@ class Convoluted(DefaultLayer):
         return outputs
 
     def forward_train(self, inputs: NetworkBuffer):
-        outputs = create_empty_buffer(self._cl, self.__output_shape[0] * self.__output_shape[1])
-        unactivated_outputs = create_empty_buffer(self._cl, self.__output_shape[0] * self.__output_shape[1])
+        outputs = create_empty_buffer(self._cl, self.__output_shape[1] * self.__output_shape[2])
+        unactivated_outputs = create_empty_buffer(self._cl, self.__output_shape[1] * self.__output_shape[2])
 
         self.execute_training_kernel("forward",
                                     (self.__output_shape[1], self.__output_shape[2]),
@@ -125,7 +125,9 @@ class Convoluted(DefaultLayer):
                                                               self.__output_shape[2] *
                                                               self.__kernel_shape[0] * self.__kernel_shape[1])
 
-        bias_gradients = create_empty_buffer(self._cl, self.__output_shape[0] * self.__output_shape[1])
+        weight_gradients = create_empty_buffer(self._cl, self.weights.get_shape())
+
+        bias_gradients = create_empty_buffer(self._cl, self.__output_shape[1] * self.__output_shape[2])
 
 
 
@@ -151,7 +153,7 @@ class Convoluted(DefaultLayer):
                                      np.int32(self.__input_shape[2]),
                                      np.int32(self.__activation),
                                      np.float32(learning_rate),
-                                     )
+        )
 
         self.execute_training_kernel("reduce_weight_gradients",  # __input_shape[2] is channel count
                                      (self.__kernel_shape[0], self.__kernel_shape[1], self.__input_shape[2]),

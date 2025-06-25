@@ -136,3 +136,33 @@ __kernel void backwards(
         }
     }
 }
+
+
+__kernel void reduce_weight_gradients(
+            __global float* weight_gradients_unreduced,
+            __global float* weight_gradients,
+
+            int kernel_width,
+            int kernel_height,
+            int channels,
+
+            int output_size
+) {
+    int kernel_x = get_global_id(0);
+    int kernel_y = get_global_id(1);
+    int channel  = get_global_id(2);
+
+    int max_output_weight_size = kernel_width * kernel_height * channels;
+
+    int base_weight_index = kernel_width * kernel_height * channel;
+    int weight_index = base_weight_index + (kernel_y * kernel_width) + kernel_x;
+
+    float weight_gradient_sum = 0.0;
+    for (int output_index=0; output_index < output_size; output_index++) {
+        int unreduced_index = (max_output_weight_size * output_index) + weight_index;
+        weight_gradient_sum = weight_gradient_sum + weight_gradients_unreduced[unreduced_index];
+    }
+
+    weight_gradients[weight_index] = weight_gradient_sum;
+}
+

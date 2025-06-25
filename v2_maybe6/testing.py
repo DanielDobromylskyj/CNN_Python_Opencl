@@ -13,7 +13,7 @@ from sampler.data_maker import load_training_data, get_cache_dir
 net = Network((
     Convoluted((100, 100, 3), (5, 5), 2, 1),  # ReLU
     FullyConnected(144, 1, 2),  # Sigmoid
-), log_level=2)
+), log_level=1)
 
 
 print("(Might Be) Loading Cache From:", get_cache_dir())
@@ -26,12 +26,20 @@ data = load_training_data(
 )
 
 print("loaded data")
-test_sample = data[3]
+test_sample = data[5]
 
 print("Score (Pre):", net.score(test_sample, test_sample.output))
 
-net.train(data[:2], [], 1, 0.1)
+
+validation_split_point = -10
+net.train(data[:validation_split_point], data[validation_split_point:], 10, 0.01, True)
 
 print("Score (Aft):", net.score(test_sample, test_sample.output))
 
+net.save("test.net")
 net.release()
+
+
+reloaded = Network.load("test.net")
+print(reloaded)
+reloaded.release()

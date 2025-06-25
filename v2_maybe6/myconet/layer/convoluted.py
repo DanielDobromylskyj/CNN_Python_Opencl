@@ -2,6 +2,7 @@ from .default import DefaultLayer
 from ..buffer import NetworkBuffer, create_empty_buffer
 import numpy as np
 import pyopencl as pycl
+from ..file_api import encode_dict, decode_dict
 
 
 def ensure_input_is_3D(shape):
@@ -85,7 +86,7 @@ class Convoluted(DefaultLayer):
                                     np.int32(self.__stride),
                                     np.int32(self.__input_shape[2]),
                                     np.int32(self.__activation),
-                                    )
+                                    ).wait()
 
         return outputs
 
@@ -108,7 +109,7 @@ class Convoluted(DefaultLayer):
                                      np.int32(self.__stride),
                                      np.int32(self.__input_shape[2]),
                                      np.int32(self.__activation),
-                                    )
+                                    ).wait()
 
         return outputs, unactivated_outputs
 
@@ -153,7 +154,7 @@ class Convoluted(DefaultLayer):
                                      np.int32(self.__input_shape[2]),
                                      np.int32(self.__activation),
                                      np.float32(learning_rate),
-        )
+        ).wait()
 
         self.execute_training_kernel("reduce_weight_gradients",  # __input_shape[2] is channel count
                                      (self.__kernel_shape[0], self.__kernel_shape[1], self.__input_shape[2]),
@@ -164,7 +165,7 @@ class Convoluted(DefaultLayer):
                                      np.int32(self.__kernel_shape[1]),
                                      np.int32(self.__input_shape[2]),
                                      np.int32(self.__output_shape[1] * self.__output_shape[2]),
-        )
+        ).wait()
 
         return None, weight_gradients, bias_gradients
 
@@ -172,19 +173,36 @@ class Convoluted(DefaultLayer):
         return self.__input_shape[0] * self.__input_shape[1] * self.__input_shape[2], self.__output_shape[0] * self.__output_shape[1]
 
     def save(self, file, compress):
-        raise NotImplementedError("Class has not implemented serialize")
+        return encode_dict({
+            "input_shape": self.__input_shape,
+            "kernel_shape": self.__kernel_shape,
+            "stride": self.__stride,
+            "activation": self.__activation,
+
+            "weights": self.weights.get_as_array(),
+            "bias": self.bias.get_as_array(),
+        }, file, compress)
 
     @staticmethod
     def load(cl, file, compressed):
-        raise NotImplementedError("Class has not implemented deserialize")
+        data = decode_dict(file, compressed)
+
+
+        layer = Convoluted(data["input_shape"], data["kernel_shape"], data["stride"], data["activation"], is_loading=True)
+
+        layer.weights = NetworkBuffer(cl, data["weights"], data["weights"].shape)
+        layer.bias = NetworkBuffer(cl, data["bias"], data["bias"].shape)
+
+        return layer
 
     @staticmethod
     def get_kernel_name():
         return "kernel"
 
     def release(self):
-        raise NotImplementedError("Class has not implemented release")
+        self.weights.release()
+        self.bias.release()
 
     def __str__(self):
-        return f"{self.__class__.__name__}(string_method=NotImplemented)"
+        return f"{self.__class__.__name__}(input={self.__input_shape}, output={self.__output_shape}, kernel={self.__kernel_shape}, stride={self.__stride}, activation={self.__activation})"
 

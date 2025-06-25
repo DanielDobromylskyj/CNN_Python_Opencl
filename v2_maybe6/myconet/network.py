@@ -3,6 +3,8 @@ import numpy as np
 import time
 import os
 
+
+from .job_manager import enqueue_many
 from .core.load import load_kernel, load_training_kernel
 from . import file_api, buffer
 from .layer import loader
@@ -19,7 +21,7 @@ class InvalidNetwork(Exception):
 class OpenCL_Instance:
     def __init__(self, log=None):
         self.ctx = cl.create_some_context()
-        self.queue = cl.CommandQueue(self.ctx)
+        self.queue = cl.CommandQueue(self.ctx, None)
 
         if log:
             device = self.ctx.devices[0]
@@ -38,6 +40,11 @@ class OpenCL_Instance:
             log.debug(f"Max Allocatable Memory: {device.max_mem_alloc_size // (1024 * 1024)} MB")
             log.debug(f"Extensions: {device.extensions}")
 
+
+class ThreadedOpenCL_Instance:
+    def __init__(self, ctx, queue):
+        self.ctx = ctx
+        self.queue = queue
 
 
 class Network:
@@ -135,6 +142,9 @@ class Network:
         return averaged
 
     def backward(self, inputs: np.ndarray, target: np.ndarray, learning_rate: float):
+        command_queue = cl.CommandQueue(self.cl.ctx, None)
+        backward_cl = ThreadedOpenCL_Instance(self.cl.ctx, command_queue)
+
         inputs = buffer.create_network_buffer_from_input(self.cl, inputs)
 
         output, backprop_data, layer_node_values = self.capture_forward(inputs)
@@ -148,6 +158,8 @@ class Network:
             layer_index = len(self.layout) - i - 1
             layer = self.layout[layer_index]
 
+            layer.change_cl(backward_cl)
+
             next_error_gradient, weight_gradients, bias_gradients = layer.backward(
                 layer_node_values[layer_index],
                 error_gradient,
@@ -160,6 +172,8 @@ class Network:
                 weight_gradients.get_and_release(),  # Store the weights on the CPU side only to save GPU?
                 bias_gradients.get_and_release()     # Could make optimizers run on GPU as well? Stops data shuffling?
             ])
+
+            layer.restore_cl()
 
         return backprop_gradients
 
@@ -176,18 +190,27 @@ class Network:
             abs(error) for error in outputs - targets
         ])
 
+    def validate(self, validation_data):
+        return sum([self.score(sample, sample.output) for sample in validation_data]) / len(validation_data)
 
-    def train(self, training_data, validation_data, epoches, learning_rate):  # todo - add validation
+    def train(self, training_data, validation_data, epoches, learning_rate, log_progress=False):
         self.__ready_kernels(load_training_kernels=True)
 
+        last_error = self.validate(validation_data)
+
         for epoch in range(epoches):
-            gradients = [
-                self.backward(sample, sample.output, learning_rate)
-                for sample in training_data
-            ]
+
+            gradients = enqueue_many(
+                self.backward,
+                [(sample, sample.output, learning_rate) for sample in training_data],
+                f"Epoch {epoch+1} | Error: {last_error} | Calculating Gradients"
+            )
+
 
             averaged_gradients = self.__average_grads(gradients)
             self.apply_gradients(averaged_gradients)
+
+            last_error = self.validate(validation_data)
 
     def __get_layout_types(self):
         layer_types = []
@@ -267,7 +290,7 @@ class Network:
         return myconet_version, pyn_version, flags, layer_types, creation_date, optimiser_id
 
     @staticmethod
-    def load(path, log_level=1):  # todo - update me pls
+    def load(path, log_level=1):
         cl_instance = OpenCL_Instance()
 
         with open(path, 'rb') as f:

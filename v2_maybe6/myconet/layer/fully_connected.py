@@ -51,7 +51,7 @@ class FullyConnected(DefaultLayer):
             unreduced_outputs.get_as_buffer(),
             self.weights.get_as_buffer(),
             np.int32(self.__input_size)
-        )
+        ).wait()
 
         self.execute_forward_kernel("reduce_outputs",
             (self.__output_size, ),
@@ -61,7 +61,7 @@ class FullyConnected(DefaultLayer):
             np.int32(self.__input_size),
             np.int32(self.__output_size),
             np.int32(self.__activation),
-        )
+        ).wait()
 
         return outputs
 
@@ -77,7 +77,7 @@ class FullyConnected(DefaultLayer):
                                     unreduced_outputs.get_as_buffer(),
                                     self.weights.get_as_buffer(),
                                     np.int32(self.__input_size)
-                                    )
+                                    ).wait()
 
         self.log.debug("Training forward -> Deducing Outputs")
         self.execute_training_kernel("reduce_outputs_forward",
@@ -89,7 +89,7 @@ class FullyConnected(DefaultLayer):
                                      np.int32(self.__input_size),
                                      np.int32(self.__output_size),
                                      np.int32(self.__activation),
-                                    )
+                                    ).wait()
 
         return outputs, unactivated_outputs, unreduced_outputs
 
@@ -133,7 +133,7 @@ class FullyConnected(DefaultLayer):
             np.int32(self.__input_size),
             np.int32(self.__activation),
             np.float32(learning_rate)
-        )
+        ).wait()
 
         self.log.debug("Training backwards -> Summing Errors")
 

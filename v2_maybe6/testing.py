@@ -7,7 +7,7 @@ from sampler.data_maker import load_training_data, get_cache_dir
 
 # fixme - Backprop / Full Pop -> Not transferring back errors correctly?
 
-# todo  - Add Backprop / Convoluted weight / input reduction
+# todo  - Add Backprop / input reduction
 
 
 net = Network((

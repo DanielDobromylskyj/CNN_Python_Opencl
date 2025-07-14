@@ -28,21 +28,23 @@ __kernel void forward(__global float* inputs,
     int batch_output_offset = output_width * output_height * batch_index;
     int batch_input_offset = input_width * input_height * channels * batch_index;
 
-    int output_index = output_y * output_width + output_x + batch_output_offset;
+    int output_index = output_y * output_width + output_x;
     int input_x_anchor = output_x * stride;
     int input_y_anchor = output_y * stride;
 
+    // fixme - Batch indexing is fucked, At least the weight index is fine (I didn't touch that bit)
+
     float total_sum = biases[output_index];
-    for (int channel=0; channel<channels; channel++) {
+    for (int channel=0; channel < channels; channel++) {
         int base_weight_index = kernel_width * kernel_height * channel;
-        int base_input_index = input_width * input_height * channel + batch_input_offset;
+        int base_input_index = (input_width * input_height * channel) + batch_input_offset;
 
         for (int dx=0; dx<kernel_width; dx++) {
             for (int dy=0; dy<kernel_height; dy++) {
                 int weight_index = base_weight_index + (dy * kernel_width) + dx;
                 int input_index = base_input_index + ((input_y_anchor + dy) * input_height) + (input_x_anchor + dx);
 
-                float weighted_value = weights[weight_index] * inputs[input_index];
+                float weighted_value = weights[weight_index]; * inputs[input_index];
                 total_sum = total_sum + weighted_value;
             }
         }
@@ -61,5 +63,6 @@ __kernel void forward(__global float* inputs,
                 break;
     }
 
-    outputs[output_index] = activated;
+
+    outputs[output_index + batch_output_offset] = activated;
 }

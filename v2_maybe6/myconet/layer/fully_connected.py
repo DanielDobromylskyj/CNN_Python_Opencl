@@ -59,10 +59,12 @@ class FullyConnected(DefaultLayer):
         batch_size = 1
 
         if batch:
-            batch_size = len(inputs)
-
             if type(inputs) in (list, tuple):
+                batch_size = len(inputs)
                 inputs = concatenate_batch_to_buffer(self._cl, inputs)
+
+            else:
+                batch_size = int(batch)
 
         outputs = buffer.create_empty_buffer(self._cl, self.__output_size * batch_size)
         unreduced_outputs = buffer.create_empty_buffer(self._cl, self.__output_size * self.__input_size * batch_size )
@@ -91,13 +93,23 @@ class FullyConnected(DefaultLayer):
         return outputs
 
 
-    def forward_train(self, inputs: NetworkBuffer):
-        outputs = buffer.create_empty_buffer(self._cl, self.__output_size)
-        unactivated_outputs = buffer.create_empty_buffer(self._cl, self.__output_size)
-        unreduced_outputs = buffer.create_empty_buffer(self._cl, self.__output_size * self.__input_size)
+    def forward_train(self, inputs: NetworkBuffer | list, batch=False):
+        batch_size = 1
+
+        if batch:
+            if type(inputs) in (list, tuple):
+                batch_size = len(inputs)
+                inputs = concatenate_batch_to_buffer(self._cl, inputs)
+
+            else:
+                batch_size = int(batch)
+
+        outputs = buffer.create_empty_buffer(self._cl, self.__output_size * batch_size)
+        unactivated_outputs = buffer.create_empty_buffer(self._cl, self.__output_size * batch_size)
+        unreduced_outputs = buffer.create_empty_buffer(self._cl, self.__output_size * self.__input_size * batch_size)
 
         event = self.execute_forward_kernel("forward",
-                                    (self.__input_size, self.__output_size),
+                                    (self.__input_size, self.__output_size, batch_size),
                                     inputs.get_as_buffer(),
                                     unreduced_outputs.get_as_buffer(),
                                     self.weights.get_as_buffer(),
@@ -106,7 +118,7 @@ class FullyConnected(DefaultLayer):
                                     )
 
         self.execute_training_kernel("reduce_outputs_forward",
-                                    (self.__output_size,),
+                                    (self.__output_size, batch_size),
                                     unreduced_outputs.get_as_buffer(),
                                      outputs.get_as_buffer(),
                                      unactivated_outputs.get_as_buffer(),

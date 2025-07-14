@@ -21,12 +21,14 @@ __kernel void forward(__global float* inputs,
                       int kernel_width,
                       int kernel_height,
                       int output_width,
+                      int output_height,
                       int stride,
                       int channels,
                       int activation_type
 ) {
     int output_x = get_global_id(0);
     int output_y = get_global_id(1);
+    int batch_index = get_global_id(2);
 
     int output_index = output_y * output_width + output_x;
     int input_x_anchor = output_x * stride;
@@ -139,30 +141,41 @@ __kernel void backwards(
 
 
 __kernel void reduce_weight_gradients(
-            __global float* weight_gradients_unreduced,
-            __global float* weight_gradients,
+    __global float* weight_gradients_unreduced,
+    __global float* weight_gradients,
 
-            int kernel_width,
-            int kernel_height,
-            int channels,
+    int kernel_width,
+    int kernel_height,
+    int channels,
 
-            int output_size
+    int output_size
 ) {
-    int kernel_x = get_global_id(0);
-    int kernel_y = get_global_id(1);
-    int channel  = get_global_id(2);
+    int kernel_index = get_global_id(0);
+    int channel = get_global_id(1);
+    int batch_index = get_global_id(2); // now used as batch selector
 
-    int max_output_weight_size = kernel_width * kernel_height * channels;
+    int kernel_x = kernel_index / kernel_width;
+    int kernel_y = kernel_index % kernel_width;
 
-    int base_weight_index = kernel_width * kernel_height * channel;
-    int weight_index = base_weight_index + (kernel_y * kernel_width) + kernel_x;
+    int weights_per_channel = kernel_width * kernel_height;
+    int weights_per_batch = weights_per_channel * channels;
 
-    float weight_gradient_sum = 0.0;
-    for (int output_index=0; output_index < output_size; output_index++) {
-        int unreduced_index = (max_output_weight_size * output_index) + weight_index;
-        weight_gradient_sum = weight_gradient_sum + weight_gradients_unreduced[unreduced_index];
+    int weight_index = (batch_index * weights_per_batch) +
+                       (channel * weights_per_channel) +
+                       (kernel_y * kernel_width) +
+                       kernel_x;
+
+    float weight_gradient_sum = 0.0f;
+
+    for (int output_index = 0; output_index < output_size; output_index++) {
+        int unreduced_index = (batch_index * output_size * weights_per_batch) +
+                              (output_index * weights_per_batch) +
+                              (channel * weights_per_channel) +
+                              (kernel_y * kernel_width) +
+                              kernel_x;
+
+        weight_gradient_sum += weight_gradients_unreduced[unreduced_index];
     }
 
     weight_gradients[weight_index] = weight_gradient_sum;
 }
-

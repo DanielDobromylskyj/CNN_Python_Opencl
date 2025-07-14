@@ -71,6 +71,8 @@ class Network:
         self.__ready_kernels()
         self.__optimiser = standard.Optimiser(self)
 
+    def force_load_all_kernels(self):
+        self.__ready_kernels(load_training_kernels=True)
 
     def __ready_kernels(self, load_training_kernels=False):
         self.log.debug(f"Loading Kernels (Loading Training Kernels = {load_training_kernels})")
@@ -100,12 +102,12 @@ class Network:
                 )
 
 
-    def capture_forward(self, input_buffer: buffer.NetworkBuffer):  # Use for training, returns extra data
+    def capture_forward(self, input_buffer: buffer.NetworkBuffer, batch=False):  # Use for training, returns extra data
         extra_data = []
         node_values = [input_buffer.get_as_array()]
 
         for layer in self.layout:
-            values = layer.forward_train(input_buffer)
+            values = layer.forward_train(input_buffer, batch)
             input_buffer = values[0]
 
             extra_data.append(values)
@@ -116,12 +118,13 @@ class Network:
 
     def forward(self, inputs, batch=False):  # Not for training. Optimised for speed, use capture_forward(input)
         if batch:
+            batch = len(inputs)
             input_buffer = concatenate_batch_to_buffer(self.cl, inputs)
         else:
             input_buffer: buffer.NetworkBuffer = buffer.create_network_buffer_from_input(self.cl, inputs)
 
         for layer in self.layout:
-            input_buffer = layer.forward(input_buffer, batch)
+            input_buffer = layer.forward(input_buffer, batch=batch)
 
         outputs = input_buffer.get_as_array()
 
@@ -152,24 +155,20 @@ class Network:
 
         return averaged
 
-    def backward(self, inputs: np.ndarray, target: np.ndarray, learning_rate: float):
-        command_queue = cl.CommandQueue(self.cl.ctx, None)
-        backward_cl = ThreadedOpenCL_Instance(self.cl.ctx, command_queue)
-
+    def backward(self, inputs: np.ndarray, target: np.ndarray, learning_rate: float, batch=False):
         inputs = buffer.create_network_buffer_from_input(self.cl, inputs)
 
-        output, backprop_data, layer_node_values = self.capture_forward(inputs)
+        output, backprop_data, layer_node_values = self.capture_forward(inputs, batch)
 
         layer_error = target - output
-        error_gradient = buffer.NetworkBuffer(self.cl, layer_error.astype(np.float32), output.shape)
+
+        error_gradient = buffer.NetworkBuffer(self.cl, layer_error.astype(np.float32), layer_error.shape)
 
         backprop_gradients = []
 
         for i in range(len(self.layout)):
             layer_index = len(self.layout) - i - 1
             layer = self.layout[layer_index]
-
-            layer.change_cl(backward_cl)
 
             next_error_gradient, weight_gradients, bias_gradients = layer.backward(
                 layer_node_values[layer_index],
@@ -183,8 +182,6 @@ class Network:
                 weight_gradients.get_and_release(),  # Store the weights on the CPU side only to save GPU?
                 bias_gradients.get_and_release()     # Could make optimizers run on GPU as well? Stops data shuffling?
             ])
-
-            layer.restore_cl()
 
         return backprop_gradients
 

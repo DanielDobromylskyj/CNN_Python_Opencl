@@ -35,7 +35,7 @@ class Logger:
         self.path = f"logs/{time.time()}.log"
 
         self.default_print = builtins.print
-        builtins.print = self.print
+        self.enable()
 
         self.__prep_file()
 
@@ -58,6 +58,12 @@ class Logger:
             return f"{colour}[{state}]{bcolors.ENDC} {text}"
 
         return f"{colour}[{state}] {text}{bcolors.ENDC}"
+
+    def disable(self):
+        builtins.print = self.default_print
+
+    def enable(self):
+        builtins.print = self.print
 
     def print(self, *args, sep=" ", end="\n"):
         if self.log_level > 0:

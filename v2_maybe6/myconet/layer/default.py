@@ -33,14 +33,23 @@ class DefaultLayer:
     def init_values(self):
         raise NotImplementedError("Class has no init_values function")
 
-    def forward(self, inputs: NetworkBuffer):
+    def forward(self, inputs: NetworkBuffer, wait=True):
         raise NotImplementedError("Class has not implemented forward method")
+
+    def batch_forward(self, many_inputs: list[NetworkBuffer]) -> list[NetworkBuffer]:
+        raise NotImplementedError("Class has not implemented batch_forward method")
 
     def forward_train(self, inputs: NetworkBuffer):
         raise NotImplementedError("Class has not implemented forward (Training) method")
 
+    def batch_forward_train(self, many_inputs: list[NetworkBuffer]) -> list[NetworkBuffer]:
+        raise NotImplementedError("Class has not implemented batch_forward_train method")
+
     def backward(self, input_values: NetworkBuffer, error_gradients: NetworkBuffer, values: list, learning_rate: float):
         raise NotImplementedError("Class has not implemented backward method")
+
+    def batch_backward(self, input_values: list[NetworkBuffer], error_gradients: list[NetworkBuffer], values: list[list], learning_rate: float):
+        raise NotImplementedError("Class has not implemented batch_backward method")
 
     def get_node_count(self):
         raise NotImplementedError("Class has not implemented get_node_count method")
@@ -63,33 +72,32 @@ class DefaultLayer:
         self.__kernels = kernels
         self._cl = cl
 
-    def change_cl(self, cl):
-        self.__cl_kernel_old = self._cl
-        self._cl = cl
-
-    def restore_cl(self):
-        self._cl = self.__cl_kernel_old
-
-    def execute_forward_kernel(self, function_name, shape, *args):
+    def execute_forward_kernel(self, function_name, shape, *args, wait_for=None):
         if self.__kernels[0] is None:
             raise ValueError("No Forward kernel available / loaded.")
 
         self.log.debug("Executing Forward kernel:", function_name, shape)
 
         kernel = getattr(self.__kernels[0], function_name)
-        return self.__execute_kernel(kernel, shape, *args)
+        return self.__execute_kernel(kernel, shape, *args, wait_for=wait_for)
 
-    def execute_training_kernel(self, function_name, shape, *args):
+    def execute_training_kernel(self, function_name, shape, *args, wait_for=None):
         if self.__kernels[1] is None:
             raise ValueError("No Training kernel available / loaded.")
 
         self.log.debug("Executing Training kernel:", function_name, shape)
 
         kernel = getattr(self.__kernels[1], function_name)
-        return self.__execute_kernel(kernel, shape, *args)
+        return self.__execute_kernel(kernel, shape, *args, wait_for=wait_for)
 
-    def __execute_kernel(self, kernel, shape, *args):
-        return kernel(self._cl.queue, shape, None, *args)
+    def __execute_kernel(self, kernel, shape, *args, wait_for=None):
+        if wait_for is None:
+            wait_for = []
+
+        if type(wait_for) not in [list, tuple]:
+            wait_for = (wait_for,)
+
+        return kernel(self._cl.queue, shape, None, *args, wait_for=wait_for)
 
     def release(self):
         raise NotImplementedError("Class has not implemented release")

@@ -4,6 +4,11 @@ import numpy as np
 
 mf = pycl.mem_flags
 
+def mul_array(shape):
+    total = shape[0]
+    for size in shape[1:]:
+        total *= size
+    return total
 
 def create_network_buffer_from_input(cl, values):
     """ A Standard way of converting input values into a network buffer object"""
@@ -44,12 +49,17 @@ def create_empty_buffer(cl, shape):
     data = np.empty(shape, dtype=np.float32)
     return NetworkBuffer(cl, data, shape)
 
-
-class NetworkBuffer:
-    def __init__(self, cl, data: np.ndarray, shape: tuple[int, ...]):
-        self.__cl = cl
-        self.__buffer = pycl.Buffer(self.__cl.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, data.nbytes, hostbuf=data)
+class EmptyNetworkBuffer:
+    def __init__(self, cl, shape, dtype, create_buffer=True):
+        self.cl = cl
         self.__shape = shape
+        self.__dtype = dtype
+
+        if create_buffer:
+            self.buffer = pycl.Buffer(self.cl.ctx, mf.READ_WRITE, size=mul_array(shape) * dtype.itemsize, hostbuf=None)
+
+    def write_to_buffer(self, array, offset=0):
+        pycl.enqueue_copy(self.cl.queue, self.buffer, array, device_offset=offset * self.__dtype.itemsize)
 
     def get_shape(self):
         """ Returns the shape of the buffer """
@@ -65,16 +75,16 @@ class NetworkBuffer:
 
     def get_as_buffer(self):
         """ Returns the data as a GPU Buffer"""
-        return self.__buffer
+        return self.buffer
 
     def get_as_array(self):
         """ Converts the buffer into a numpy array for CPU usage"""
         output = np.empty(self.get_shape(), dtype=np.float32)
-        pycl.enqueue_copy(self.__cl.queue, output, self.get_as_buffer()).wait()
+        pycl.enqueue_copy(self.cl.queue, output, self.get_as_buffer()).wait()
         return output
 
     def release(self):
-        self.__buffer.release()
+        self.buffer.release()
 
     def get_and_release(self):
         array = self.get_as_array()
@@ -83,11 +93,18 @@ class NetworkBuffer:
 
     def __add__(self, other):
         if isinstance(other, NetworkBuffer) or isinstance(other, Gradients):
-            return NetworkBuffer(self.__cl, self.get_as_array() + other.get_as_array(), self.__shape)
-        return NetworkBuffer(self.__cl, self.get_as_array() + other, self.__shape)
+            return NetworkBuffer(self.cl, self.get_as_array() + other.get_as_array(), self.__shape)
+        return NetworkBuffer(self.cl, self.get_as_array() + other, self.__shape)
 
     def __truediv__(self, other):
-        return NetworkBuffer(self.__cl, self.get_as_array() / other, self.__shape)
+        return NetworkBuffer(self.cl, self.get_as_array() / other, self.__shape)
+
+
+
+class NetworkBuffer(EmptyNetworkBuffer):
+    def __init__(self, cl, data: np.ndarray, shape: tuple[int, ...]):
+        super().__init__(cl, shape, data.dtype, create_buffer=False)
+        self.buffer = pycl.Buffer(self.cl.ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, data.nbytes, hostbuf=data)
 
 
 class BufferList:

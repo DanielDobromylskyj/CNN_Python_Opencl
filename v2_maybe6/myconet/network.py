@@ -9,6 +9,7 @@ from .core.load import load_kernel, load_training_kernel
 from . import file_api, buffer
 from .layer import loader
 from .logger import Logger
+from .util import concatenate_batch_to_buffer
 
 from .optimisers import standard
 
@@ -113,13 +114,23 @@ class Network:
         return input_buffer.get_as_array(), extra_data, node_values
 
 
-    def forward(self, inputs):  # Not for training. Optimised for speed, use capture_forward(input)
-        input_buffer: buffer.NetworkBuffer = buffer.create_network_buffer_from_input(self.cl, inputs)
+    def forward(self, inputs, batch=False):  # Not for training. Optimised for speed, use capture_forward(input)
+        if batch:
+            input_buffer = concatenate_batch_to_buffer(self.cl, inputs)
+        else:
+            input_buffer: buffer.NetworkBuffer = buffer.create_network_buffer_from_input(self.cl, inputs)
 
         for layer in self.layout:
-            input_buffer = layer.forward(input_buffer)
-        
-        return input_buffer.get_as_array()
+            input_buffer = layer.forward(input_buffer, batch)
+
+        outputs = input_buffer.get_as_array()
+
+        if batch:
+            final_output_size = self.layout[-1].get_node_count()[1]
+            outputs = [outputs[i:i + final_output_size] for i in range(0, len(outputs), final_output_size)]
+
+        return outputs
+
 
     @staticmethod
     def __average_grads(data):

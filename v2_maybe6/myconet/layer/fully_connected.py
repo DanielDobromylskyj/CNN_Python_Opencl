@@ -4,6 +4,7 @@ from .default import DefaultLayer
 from .. import file_api
 from .. import buffer
 from ..buffer import NetworkBuffer
+from ..util import concatenate_batch_to_buffer, weight_init, bias_init
 
 
 class FullyConnected(DefaultLayer):
@@ -25,15 +26,17 @@ class FullyConnected(DefaultLayer):
         if self.__is_loading:
             return  # do not init
 
+        # weight_init and bias_init take into account what activation and are in the util.py file
+
         self.weights = buffer.NetworkBuffer(
             self._cl,
-            np.ones((self.__input_size * self.__output_size), dtype=np.float32),  # todo
+            weight_init(self.__input_size, self.__output_size, self.__activation),
             (self.__input_size * self.__output_size, )
         )
 
         self.bias = buffer.NetworkBuffer(
             self._cl,
-            np.zeros((self.__output_size,), dtype=np.float32),  # todo
+            bias_init(self.__input_size, self.__output_size, self.__activation),
             (self.__output_size,)
         )
 
@@ -41,45 +44,67 @@ class FullyConnected(DefaultLayer):
     def get_node_count(self):
         return self.__input_size, self.__output_size
 
-    def forward(self, inputs: NetworkBuffer):
-        outputs = buffer.create_empty_buffer(self._cl, self.__output_size)
-        unreduced_outputs = buffer.create_empty_buffer(self._cl, self.__output_size * self.__input_size)
 
-        self.execute_forward_kernel("forward",
-            (self.__input_size, self.__output_size),
-            inputs.get_as_buffer(),
-            unreduced_outputs.get_as_buffer(),
-            self.weights.get_as_buffer(),
-            np.int32(self.__input_size)
-        ).wait()
+    def get_approximate_gpu_usage(self, data: np.ndarray | list, batch=False):
+        single_output_usage = self.__output_size + self.__output_size * self.__input_size
+        bytes_per_item = np.float32().nbytes
+
+        if batch:
+            return (single_output_usage + data[0].shape[0]) * bytes_per_item * len(data)
+        else:
+            return (single_output_usage + data.shape[0]) * bytes_per_item
+
+
+    def forward(self, inputs: NetworkBuffer | list, wait=True, batch=False):
+        batch_size = 1
+
+        if batch:
+            batch_size = len(inputs)
+
+            if type(inputs) in (list, tuple):
+                inputs = concatenate_batch_to_buffer(self._cl, inputs)
+
+        outputs = buffer.create_empty_buffer(self._cl, self.__output_size * batch_size)
+        unreduced_outputs = buffer.create_empty_buffer(self._cl, self.__output_size * self.__input_size * batch_size )
+
+        event = self.execute_forward_kernel("forward",
+                                             (self.__input_size, self.__output_size, batch_size),
+                                             inputs.get_as_buffer(),
+                                             unreduced_outputs.get_as_buffer(),
+                                             self.weights.get_as_buffer(),
+                                             np.int32(self.__input_size),
+                                             np.int32(self.__output_size)
+                                             )
+
 
         self.execute_forward_kernel("reduce_outputs",
-            (self.__output_size, ),
-            unreduced_outputs.get_as_buffer(),
-            outputs.get_as_buffer(),
-            self.bias.get_as_buffer(),
-            np.int32(self.__input_size),
-            np.int32(self.__output_size),
-            np.int32(self.__activation),
-        ).wait()
+                                             (self.__output_size, batch_size),
+                                             unreduced_outputs.get_as_buffer(),
+                                             outputs.get_as_buffer(),
+                                             self.bias.get_as_buffer(),
+                                             np.int32(self.__input_size),
+                                             np.int32(self.__output_size),
+                                             np.int32(self.__activation),
+                                             wait_for=event
+                                             ).wait()
 
         return outputs
+
 
     def forward_train(self, inputs: NetworkBuffer):
         outputs = buffer.create_empty_buffer(self._cl, self.__output_size)
         unactivated_outputs = buffer.create_empty_buffer(self._cl, self.__output_size)
         unreduced_outputs = buffer.create_empty_buffer(self._cl, self.__output_size * self.__input_size)
 
-        self.log.debug("Training forward -> Forward Kernel")
-        self.execute_forward_kernel("forward",
+        event = self.execute_forward_kernel("forward",
                                     (self.__input_size, self.__output_size),
                                     inputs.get_as_buffer(),
                                     unreduced_outputs.get_as_buffer(),
                                     self.weights.get_as_buffer(),
-                                    np.int32(self.__input_size)
-                                    ).wait()
+                                    np.int32(self.__input_size),
+                                    np.int32(self.__output_size),
+                                    )
 
-        self.log.debug("Training forward -> Deducing Outputs")
         self.execute_training_kernel("reduce_outputs_forward",
                                     (self.__output_size,),
                                     unreduced_outputs.get_as_buffer(),
@@ -89,6 +114,7 @@ class FullyConnected(DefaultLayer):
                                      np.int32(self.__input_size),
                                      np.int32(self.__output_size),
                                      np.int32(self.__activation),
+                                     wait_for=event
                                     ).wait()
 
         return outputs, unactivated_outputs, unreduced_outputs

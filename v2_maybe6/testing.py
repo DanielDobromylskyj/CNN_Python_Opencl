@@ -10,11 +10,14 @@ from sampler.data_maker import load_training_data, get_cache_dir
 # todo  - Add Backprop / input reduction
 
 
-net = Network((
+'''net = Network((
     Convoluted((100, 100, 3), (5, 5), 2, 1),  # ReLU
     FullyConnected(144, 1, 2),  # Sigmoid
-), log_level=1)
+), log_level=1)'''
 
+net = Network((
+    FullyConnected(30000, 1, 1),  # ReLU
+), log_level=1)
 
 print("(Might Be) Loading Cache From:", get_cache_dir())
 data = load_training_data(

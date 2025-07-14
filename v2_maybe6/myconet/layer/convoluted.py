@@ -1,8 +1,9 @@
 from .default import DefaultLayer
 from ..buffer import NetworkBuffer, create_empty_buffer
-import numpy as np
-import pyopencl as pycl
 from ..file_api import encode_dict, decode_dict
+from ..util import concatenate_batch_to_buffer, weight_init, bias_init
+
+import numpy as np
 
 
 def ensure_input_is_3D(shape):
@@ -60,17 +61,28 @@ class Convoluted(DefaultLayer):
             return  # do not init
 
         self.weights = NetworkBuffer(
-            self._cl, np.ones((self.__kernel_shape[0] * self.__kernel_shape[1] * self.__input_shape[2]), dtype=np.float32),  # todo
+            self._cl,
+            weight_init(self.__kernel_shape[0] * self.__kernel_shape[1] * self.__input_shape[2], 1, self.__activation),
             (self.__kernel_shape[0] * self.__kernel_shape[1] * self.__input_shape[2],)
         )
 
         self.bias = NetworkBuffer(
-            self._cl, np.zeros((self.__output_shape[1] * self.__output_shape[2]), dtype=np.float32),  # todo
+            self._cl,
+            bias_init((self.__output_shape[1] * self.__output_shape[2]), 1, self.__activation),
             (self.__output_shape[1] * self.__output_shape[2],)
         )
 
-    def forward(self, inputs: NetworkBuffer):
-        outputs = create_empty_buffer(self._cl, self.__output_shape[1] * self.__output_shape[2])
+    def forward(self, inputs: NetworkBuffer | list, wait=True, batch=False):
+        batch_size = 1
+
+        if batch:
+            batch_size = len(inputs)
+
+            if type(inputs) in (list, tuple):
+                inputs = concatenate_batch_to_buffer(self._cl, inputs)
+
+
+        outputs = create_empty_buffer(self._cl, self.__output_shape[1] * self.__output_shape[2] * batch_size)
 
         self.execute_forward_kernel("forward",
                                     (self.__output_shape[0], self.__output_shape[1]),
@@ -83,6 +95,7 @@ class Convoluted(DefaultLayer):
                                     np.int32(self.__kernel_shape[0]),
                                     np.int32(self.__kernel_shape[1]),
                                     np.int32(self.__output_shape[1]),  # Output shape[0] is the channel count
+                                    np.int32(self.__output_shape[2]),
                                     np.int32(self.__stride),
                                     np.int32(self.__input_shape[2]),
                                     np.int32(self.__activation),

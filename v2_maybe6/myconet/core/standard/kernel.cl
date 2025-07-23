@@ -44,7 +44,7 @@ __kernel void forward(__global float* inputs,
                 int weight_index = base_weight_index + (dy * kernel_width) + dx;
                 int input_index = base_input_index + ((input_y_anchor + dy) * input_height) + (input_x_anchor + dx);
 
-                float weighted_value = weights[weight_index]; * inputs[input_index];
+                float weighted_value = weights[weight_index] * inputs[input_index]; // fixme - index problems
                 total_sum = total_sum + weighted_value;
             }
         }

@@ -34,7 +34,7 @@ from myconet.network import Network
 
 net = Network((
     Convoluted((100, 100, 3), (5, 5), 2, 1),  # ReLU
-    FullyConnected(144, 1, 2),  # Sigmoid
+    FullyConnected(2304, 1, 2),  # Sigmoid
 ), log_level=2)
 
 net.save("my_neural_network.pyn")

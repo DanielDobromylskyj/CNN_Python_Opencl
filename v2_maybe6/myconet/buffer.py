@@ -5,6 +5,9 @@ import numpy as np
 mf = pycl.mem_flags
 
 def mul_array(shape):
+    if type(shape) is int:
+        return shape
+
     total = shape[0]
     for size in shape[1:]:
         total *= size
@@ -45,9 +48,8 @@ def rearrange_feature_map_output(cl, outputs):
     return BufferList(cl, input_gradients), BufferList(cl, weight_gradients), BufferList(cl, bias_gradients)
 
 
-def create_empty_buffer(cl, shape):
-    data = np.empty(shape, dtype=np.float32)
-    return NetworkBuffer(cl, data, shape)
+def create_empty_buffer(cl, shape, dtype=np.float32):
+    return EmptyNetworkBuffer(cl, shape, dtype)
 
 class EmptyNetworkBuffer:
     def __init__(self, cl, shape, dtype, create_buffer=True):
@@ -56,10 +58,13 @@ class EmptyNetworkBuffer:
         self.__dtype = dtype
 
         if create_buffer:
-            self.buffer = pycl.Buffer(self.cl.ctx, mf.READ_WRITE, size=mul_array(shape) * dtype.itemsize, hostbuf=None)
+            self.buffer = pycl.Buffer(self.cl.ctx, mf.READ_WRITE, size=mul_array(shape) * np.dtype(dtype).itemsize, hostbuf=None)
 
     def write_to_buffer(self, array, offset=0):
-        pycl.enqueue_copy(self.cl.queue, self.buffer, array, device_offset=offset * self.__dtype.itemsize)
+        pycl.enqueue_copy(self.cl.queue, self.buffer, array, device_offset=offset * np.dtype(self.__dtype).itemsize)
+
+    def get_dtype(self):
+        return self.__dtype
 
     def get_shape(self):
         """ Returns the shape of the buffer """

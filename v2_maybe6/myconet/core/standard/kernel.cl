@@ -42,9 +42,9 @@ __kernel void forward(__global float* inputs,
         for (int dx=0; dx<kernel_width; dx++) {
             for (int dy=0; dy<kernel_height; dy++) {
                 int weight_index = base_weight_index + (dy * kernel_width) + dx;
-                int input_index = base_input_index + ((input_y_anchor + dy) * input_height) + (input_x_anchor + dx);
+                int input_index = base_input_index + ((input_y_anchor + dy) * input_width) + (input_x_anchor + dx);
 
-                float weighted_value = weights[weight_index] * inputs[input_index]; // fixme - index problems
+                float weighted_value = weights[weight_index] * inputs[input_index];
                 total_sum = total_sum + weighted_value;
             }
         }

@@ -1,7 +1,7 @@
 from .default import DefaultLayer
 from ..buffer import NetworkBuffer, create_empty_buffer
 from ..file_api import encode_dict, decode_dict
-from ..util import concatenate_batch_to_buffer, weight_init, bias_init
+from ..util import concatenate_batch_to_buffer, weight_init, bias_init, fill_empty_buffer_with_value
 
 import numpy as np
 
@@ -82,8 +82,6 @@ class Convoluted(DefaultLayer):
 
             else:
                 batch_size = int(batch)
-
-            print(self.__output_shape[1] * self.__output_shape[2] * batch_size)
 
         outputs = create_empty_buffer(self._cl, self.__output_shape[1] * self.__output_shape[2] * batch_size)
 
@@ -205,7 +203,7 @@ class Convoluted(DefaultLayer):
         return None, weight_gradients, bias_gradients
 
     def get_node_count(self):
-        return self.__input_shape[0] * self.__input_shape[1] * self.__input_shape[2], self.__output_shape[0] * self.__output_shape[1]
+        return self.__input_shape[0] * self.__input_shape[1] * self.__input_shape[2], self.__output_shape[1] * self.__output_shape[2]
 
     def save(self, file, compress):
         return encode_dict({

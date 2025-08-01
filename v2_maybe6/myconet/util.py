@@ -1,10 +1,16 @@
-from .buffer import NetworkBuffer
+from .buffer import EmptyNetworkBuffer, NetworkBuffer
 import numpy as np
 
+
+def fill_empty_buffer_with_value(buffer: EmptyNetworkBuffer, value: float):
+    size = np.prod(buffer.get_shape())
+    array = np.full(size, value, dtype=buffer.get_dtype())
+    buffer.write_to_buffer(array)
 
 def concatenate_batch_to_buffer(cl, arrays):
     """ Warning: All arrays must be same size! """
     big_array = np.stack(arrays)  # if shape is consistent
+
     return NetworkBuffer(cl, big_array, big_array.shape)
 
 

@@ -63,18 +63,24 @@ __kernel void backwards(
         __global float* right_hand_nodes_activated,
         __global float* right_hand_nodes_unactivated,
         __global float* weights,
-        __global float* right_hand_nodes_error_gradients, // left_hand_nodes_error_gradients_unreduced
+        __global float* right_hand_nodes_error_gradients,
         __global float* left_hand_nodes_error_gradients_unreduced, // Same size as the weights, so we can "reduce" it later for our final output
         __global float* weight_gradients,
         __global float* bias_gradients,
         int right_hand_nodes_size, int left_hand_nodes_size, int activation_type,
-        float learning_rate
+        float learning_rate,
+        int batch_count
 ) {
     int left_hand_index = get_global_id(0);
     int right_hand_index = get_global_id(1);
+    int batch_index = get_global_id(2);
 
-    float activated_value = right_hand_nodes_activated[right_hand_index];
-    float unactivated_value = right_hand_nodes_unactivated[right_hand_index];
+    int right_hand_batch_offset = batch_index * right_hand_nodes_size;
+    int left_hand_batch_offset = batch_index * left_hand_nodes_size;
+    int weight_batch_offset = right_hand_nodes_size * left_hand_nodes_size * batch_index;
+
+    float activated_value = right_hand_nodes_activated[right_hand_index + right_hand_batch_offset];
+    float unactivated_value = right_hand_nodes_unactivated[right_hand_index + right_hand_batch_offset];
 
     float derivative = 1.0f;
     switch (activation_type) {
@@ -89,18 +95,17 @@ __kernel void backwards(
             break;
     }
 
-    float delta = right_hand_nodes_error_gradients[right_hand_index] * derivative;
-    float weight_gradient = delta * left_hand_nodes[left_hand_index] * learning_rate;
+    float delta = right_hand_nodes_error_gradients[right_hand_index + right_hand_batch_offset] * derivative;
+    float weight_gradient = delta * left_hand_nodes[left_hand_index + left_hand_batch_offset] * learning_rate;
 
     int weight_index = left_hand_index * right_hand_nodes_size + right_hand_index;
 
-    weight_gradients[weight_index] = clip(weight_gradient, 1.0f);
+    weight_gradients[weight_index + weight_batch_offset] = clip(weight_gradient, 1.0f);
 
-
-    left_hand_nodes_error_gradients_unreduced[weight_index] = clip(weights[weight_index] * delta, 1.0f);
+    left_hand_nodes_error_gradients_unreduced[weight_index + weight_batch_offset] = clip(weights[weight_index] * delta, 1.0f);
 
     if (left_hand_index == 0) {
-        bias_gradients[right_hand_index] = delta * learning_rate;
+        bias_gradients[right_hand_index + right_hand_batch_offset] = delta * learning_rate;
     }
 }
 

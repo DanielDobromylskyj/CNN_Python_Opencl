@@ -200,7 +200,7 @@ class Convoluted(DefaultLayer):
                                      wait_for=event
         ).wait()
 
-        return None, weight_gradients, bias_gradients
+        return None, weight_gradients.get_and_release(), bias_gradients.get_and_release()
 
     def get_node_count(self):
         return self.__input_shape[0] * self.__input_shape[1] * self.__input_shape[2], self.__output_shape[1] * self.__output_shape[2]

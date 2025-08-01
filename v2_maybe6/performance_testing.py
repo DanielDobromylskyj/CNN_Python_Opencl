@@ -24,9 +24,13 @@ training_data = [
 
 print("Created training Data")
 
-net = Network((
+"""net = Network((
     Convoluted((100, 100, 3), (5, 5), 2, 1),  # ReLU
     FullyConnected(2304, 1, 2),  # Sigmoid
+), log_level=1)"""
+
+net = Network((
+    FullyConnected(30_000, 1, 2),  # Sigmoid
 ), log_level=1)
 
 
@@ -58,18 +62,23 @@ net.force_load_all_kernels()  # Force load kernels as we are not going though no
 
 training_standard_start = time.time()
 
-"""for inputs, outputs in training_data:
-    net.backward(inputs, outputs, 0.01)"""
+for inputs, outputs in training_data:
+    net.backward(inputs, outputs, 0.01)
 
 training_standard_end = time.time()
+
+print("Completed Backward Standard Tests")
 
 # Training Test -> Batch Execution
 
 training_batch_start = time.time()
 
-# todo
+inputs, outputs = zip(*training_data)
+net.backward(inputs, outputs, 0.01, batch=True)
 
 training_batch_end = time.time()
+
+print("Completed Backward Batched Tests")
 
 # Test Output / Calculations
 
@@ -79,10 +88,6 @@ forward_batched_elapsed = batched_end - batched_start
 backward_standard_elapsed = training_standard_end - training_standard_start
 backward_batch_elapsed = training_batch_end - training_batch_start
 
-
-print(outputs1[:5])
-print(outputs2[:5])
-
 output_match = all([
     round(outputs1[i][0], 4) == round(outputs2[i][0], 4)
     for i in range(len(outputs1))
@@ -90,7 +95,10 @@ output_match = all([
 
 print(">> PERFORMANCE BREAK DOWN <<")
 print("Batch Size ->", len(test_data))
-print(f"Batch Speed Increase -> {round((forward_standard_elapsed - forward_batched_elapsed) / forward_standard_elapsed * 100, 1)}%")
+
+batch_increase_forward = round((forward_standard_elapsed - forward_batched_elapsed) / forward_standard_elapsed * 100, 1)
+batch_increase_backward = round((backward_standard_elapsed - backward_batch_elapsed) / backward_standard_elapsed * 100, 1)
+print(f"Batch Speed Increase -> {batch_increase_forward}%, {batch_increase_backward}%")
 print("Output Match ->", output_match)
 print("\n")
 data = [

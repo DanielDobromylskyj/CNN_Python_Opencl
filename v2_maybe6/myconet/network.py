@@ -130,7 +130,7 @@ class Network:
 
         if batch:
             final_output_size = self.layout[-1].get_node_count()[1]
-            outputs = [outputs[i:i + final_output_size] for i in range(0, len(outputs), final_output_size)]
+            outputs = outputs.reshape(-1, final_output_size)
 
         return outputs
 
@@ -156,6 +156,14 @@ class Network:
         return averaged
 
     def backward(self, inputs: np.ndarray, target: np.ndarray, learning_rate: float, batch=False):
+        batch_size = 1
+
+        if batch:
+            if type(inputs) in (list, tuple):
+                batch_size = len(inputs)
+            else:
+                batch_size = int(batch)
+
         inputs = buffer.create_network_buffer_from_input(self.cl, inputs)
 
         output, backprop_data, layer_node_values = self.capture_forward(inputs, batch)
@@ -174,13 +182,14 @@ class Network:
                 layer_node_values[layer_index],
                 error_gradient,
                 backprop_data[layer_index],
-                learning_rate
+                learning_rate,
+                batch=batch_size
             )
 
             error_gradient = next_error_gradient
             backprop_gradients.append([
-                weight_gradients.get_and_release(),  # Store the weights on the CPU side only to save GPU?
-                bias_gradients.get_and_release()     # Could make optimizers run on GPU as well? Stops data shuffling?
+                weight_gradients,
+                bias_gradients
             ])
 
         return backprop_gradients

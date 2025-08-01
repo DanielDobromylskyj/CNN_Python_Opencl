@@ -131,13 +131,23 @@ class FullyConnected(DefaultLayer):
 
         return outputs, unactivated_outputs, unreduced_outputs
 
-    def backward(self, input_values: np.ndarray, error_gradients: NetworkBuffer, values: list, learning_rate: float):
+    def backward(self, input_values: np.ndarray, error_gradients: NetworkBuffer, values: list, learning_rate: float, batch=False):
+        batch_size = 1
+
+        if batch:
+            if type(input_values) in (list, tuple):
+                batch_size = len(input_values)
+                input_values = concatenate_batch_to_buffer(self._cl, input_values)
+
+            else:
+                batch_size = int(batch)
+
         outputs, unactivated_outputs, unreduced_outputs = values
 
-        layer_errors_unreduced = buffer.create_empty_buffer(self._cl, self.__input_size * self.__output_size)
+        layer_errors_unreduced = buffer.create_empty_buffer(self._cl, self.__input_size * self.__output_size * batch_size)
 
-        weight_gradients = buffer.create_empty_buffer(self._cl, self.__input_size * self.__output_size)
-        bias_gradients = buffer.create_empty_buffer(self._cl, self.__output_size)
+        weight_gradients = buffer.create_empty_buffer(self._cl, self.__input_size * self.__output_size * batch_size)
+        bias_gradients = buffer.create_empty_buffer(self._cl, self.__output_size * batch_size)
 
         self.log.true_debug(f"Unreduced Errors Buffer Size: {layer_errors_unreduced.get_shape()}")
         self.log.true_debug(f"Weight Buffer Size: {weight_gradients.get_shape()}")
@@ -156,7 +166,7 @@ class FullyConnected(DefaultLayer):
         self.log.debug("Training backwards -> Backwards Kernel")
         self.execute_training_kernel(
             "backwards",
-            (self.__input_size, self.__output_size),
+            (self.__input_size, self.__output_size, batch_size),
             NetworkBuffer(self._cl, input_values, input_values.shape).get_as_buffer(),
             outputs.get_as_buffer(),
             unactivated_outputs.get_as_buffer(),
@@ -170,17 +180,37 @@ class FullyConnected(DefaultLayer):
             np.int32(self.__output_size),
             np.int32(self.__input_size),
             np.int32(self.__activation),
-            np.float32(learning_rate)
+            np.float32(learning_rate),
+            np.int32(batch_size),
         ).wait()
 
         self.log.debug("Training backwards -> Summing Errors")
 
-        # Using CPU cos doing this on the GPU is a PAIN with float32 (or anything but ints)
-        pre_summed = layer_errors_unreduced.get_as_array().reshape((self.__output_size, self.__input_size))
-        summed = pre_summed.sum(axis=0).astype(np.float32) # Sum along output dimension -> result shape: (input_size, )
-        layer_errors_reduced = buffer.NetworkBuffer(self._cl, summed, (self.__input_size,))
+        if batch:
+            raw = layer_errors_unreduced.get_as_array().reshape(-1, self.__output_size * self.__input_size)
 
-        return layer_errors_reduced, weight_gradients, bias_gradients
+            # Vectorized: reshape all at once to (num_chunks, output_size, input_size)
+            pre_summed = raw.reshape(-1, self.__output_size, self.__input_size)
+            summed = pre_summed.sum(axis=1).astype(np.float32)
+
+            # Wrap each summed chunk in a buffer
+            layer_errors_reduced_chunks = [
+                buffer.NetworkBuffer(self._cl, s, (self.__input_size,)) for s in summed
+            ]
+
+            return (
+                layer_errors_reduced_chunks,
+                weight_gradients.get_and_release().reshape(-1, self.__input_size * self.__output_size),
+                bias_gradients.get_and_release().reshape(-1, self.__output_size)
+            )
+
+        else:
+            # Using CPU cos doing this on the GPU is a PAIN with float32 (or anything but ints)
+            pre_summed = layer_errors_unreduced.get_as_array().reshape((self.__output_size, self.__input_size))
+            summed = pre_summed.sum(axis=0).astype(np.float32) # Sum along output dimension -> result shape: (input_size, )
+            layer_errors_reduced = buffer.NetworkBuffer(self._cl, summed, (self.__input_size,))
+
+            return layer_errors_reduced, weight_gradients, bias_gradients
 
     def save(self, file, compress):
         file_api.encode_dict({

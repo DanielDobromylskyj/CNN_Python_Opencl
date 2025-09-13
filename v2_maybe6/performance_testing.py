@@ -7,9 +7,11 @@ import numpy as np
 import random
 import time
 
+BATCH_SIZE = 300
+
 test_data = [
     np.random.randn(30_000).astype(np.float32)
-    for _ in range(1000)
+    for _ in range(BATCH_SIZE)
 ]
 
 print("Creating Training Data...  (50%)")
@@ -30,8 +32,8 @@ print("Created training Data")
 ), log_level=1)"""
 
 net = Network((
-    FullyConnected(30_000, 1, 2),  # Sigmoid
-), log_level=1)
+    FullyConnected(30_000, 10, 2),  # Sigmoid
+), log_level=3)
 
 
 # Forward Test -> Standard Execution
@@ -62,8 +64,10 @@ net.force_load_all_kernels()  # Force load kernels as we are not going though no
 
 training_standard_start = time.time()
 
-for inputs, outputs in training_data:
+training_outputs_standard = [
     net.backward(inputs, outputs, 0.01)
+    for inputs, outputs in training_data
+]
 
 training_standard_end = time.time()
 
@@ -74,7 +78,7 @@ print("Completed Backward Standard Tests")
 training_batch_start = time.time()
 
 inputs, outputs = zip(*training_data)
-net.backward(inputs, outputs, 0.01, batch=True)
+training_outputs_batched = net.backward(inputs, outputs, 0.01, batch=True)
 
 training_batch_end = time.time()
 
@@ -93,24 +97,64 @@ output_match = all([
     for i in range(len(outputs1))
 ]) if len(outputs1) == len(outputs2) else "Different Sizes!"
 
-print(">> PERFORMANCE BREAK DOWN <<")
+def same_shape(a, b):
+    """Recursively checks if the structure of a and b are the same."""
+    if isinstance(a, np.ndarray) and isinstance(b, np.ndarray):
+        return a.shape == b.shape
+    elif isinstance(a, list) and isinstance(b, list):
+        if len(a) != len(b):
+            return False
+        return all(same_shape(x, y) for x, y in zip(a, b))
+    else:
+        # Base case: both must be scalar types
+        return not isinstance(a, (list, np.ndarray)) and not isinstance(b, (list, np.ndarray))
+
+def compare_values(a, b, tol=1e-8):
+    """Recursively compare values of a and b."""
+    if isinstance(a, np.ndarray) and isinstance(b, np.ndarray):
+        return np.allclose(a, b, atol=tol)
+    elif isinstance(a, list) and isinstance(b, list):
+        if len(a) != len(b):
+            return False
+        return all(compare_values(x, y, tol=tol) for x, y in zip(a, b))
+    else:
+        return a == b
+
+def compare_nested_lists(a, b):
+    """Wrapper function to compare shape and values."""
+    if not same_shape(a, b):
+        return False, "Shape mismatch"
+
+    if not compare_values(a, b):
+        return False, "Value mismatch"
+
+    return True, None
+
+output_match_2, err = compare_nested_lists(training_outputs_standard, training_outputs_batched)
+
+print("\n>> PERFORMANCE BREAK DOWN <<")
 print("Batch Size ->", len(test_data))
 
 batch_increase_forward = round((forward_standard_elapsed - forward_batched_elapsed) / forward_standard_elapsed * 100, 1)
 batch_increase_backward = round((backward_standard_elapsed - backward_batch_elapsed) / backward_standard_elapsed * 100, 1)
 print(f"Batch Speed Increase -> {batch_increase_forward}%, {batch_increase_backward}%")
-print("Output Match ->", output_match)
+print("Forward Output Match ->", output_match)
+print("Backward Output Match ->", output_match_2, f"-> {err} error" if err else "")
+
+if err:
+    print(training_outputs_standard[1])
+    print(training_outputs_batched[1])
+
 print("\n")
 data = [
-    ["Standard", "Forward", "Iterative", round(forward_standard_elapsed, 3), round(forward_standard_elapsed / len(test_data) * 1000, 2)],
-    ["Batched", "Forward", "Grouped", round(forward_batched_elapsed, 3), round(forward_batched_elapsed / len(test_data) * 1000, 2)],
+    ["Standard", "Forward", "Iterative", round(forward_standard_elapsed, 3), round(forward_standard_elapsed / len(test_data) * 1000, 2), round(forward_standard_elapsed / len(test_data) * 10_000, 1)],
+    ["Batched", "Forward", "Grouped", round(forward_batched_elapsed, 3), round(forward_batched_elapsed / len(test_data) * 1000, 2), round(forward_batched_elapsed / len(test_data) * 10_000, 1)],
 
-    ["Standard", "Backward", "Iterative", round(backward_standard_elapsed, 3),
-     round(backward_standard_elapsed / len(test_data) * 1000, 2)],
-    ["Batched", "Backward", "Grouped", round(backward_batch_elapsed, 3), round(backward_batch_elapsed / len(test_data) * 1000, 2)],
+    ["Standard", "Backward", "Iterative", round(backward_standard_elapsed, 3), round(backward_standard_elapsed / len(test_data) * 1000, 2), round(backward_standard_elapsed / len(test_data) * 10_000, 1)],
+    ["Batched", "Backward", "Grouped", round(backward_batch_elapsed, 3), round(backward_batch_elapsed / len(test_data) * 1000, 2), round(backward_batch_elapsed / len(test_data) * 10_000, 1)],
 ]
 
-headers = ["Name", "Direction", "Type", "Total Time (s)", "Time Per Item (ms)"]
+headers = ["Name", "Direction", "Type", "Total Time (s)", "Time Per Item (ms)", "Time Per Epoch (10k Training) (s)"]
 
 net.log.disable()
 print(tabulate(data, headers=headers, tablefmt="grid"))

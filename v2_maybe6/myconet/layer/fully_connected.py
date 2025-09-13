@@ -4,7 +4,7 @@ from .default import DefaultLayer
 from .. import file_api
 from .. import buffer
 from ..buffer import NetworkBuffer
-from ..util import concatenate_batch_to_buffer, weight_init, bias_init
+from ..util import concatenate_batch_to_buffer, weight_init, bias_init, format_with_batching
 
 
 class FullyConnected(DefaultLayer):
@@ -56,15 +56,7 @@ class FullyConnected(DefaultLayer):
 
 
     def forward(self, inputs: NetworkBuffer | list, wait=True, batch=False):
-        batch_size = 1
-
-        if batch:
-            if type(inputs) in (list, tuple):
-                batch_size = len(inputs)
-                inputs = concatenate_batch_to_buffer(self._cl, inputs)
-
-            else:
-                batch_size = int(batch)
+        inputs, batch_size = format_with_batching(self._cl, inputs, batch)
 
         outputs = buffer.create_empty_buffer(self._cl, self.__output_size * batch_size)
         unreduced_outputs = buffer.create_empty_buffer(self._cl, self.__output_size * self.__input_size * batch_size )
@@ -94,15 +86,7 @@ class FullyConnected(DefaultLayer):
 
 
     def forward_train(self, inputs: NetworkBuffer | list, batch=False):
-        batch_size = 1
-
-        if batch:
-            if type(inputs) in (list, tuple):
-                batch_size = len(inputs)
-                inputs = concatenate_batch_to_buffer(self._cl, inputs)
-
-            else:
-                batch_size = int(batch)
+        inputs, batch_size = format_with_batching(self._cl, inputs, batch)
 
         outputs = buffer.create_empty_buffer(self._cl, self.__output_size * batch_size)
         unactivated_outputs = buffer.create_empty_buffer(self._cl, self.__output_size * batch_size)
@@ -131,16 +115,8 @@ class FullyConnected(DefaultLayer):
 
         return outputs, unactivated_outputs, unreduced_outputs
 
-    def backward(self, input_values: np.ndarray, error_gradients: NetworkBuffer, values: list, learning_rate: float, batch=False):
-        batch_size = 1
-
-        if batch:
-            if type(input_values) in (list, tuple):
-                batch_size = len(input_values)
-                input_values = concatenate_batch_to_buffer(self._cl, input_values)
-
-            else:
-                batch_size = int(batch)
+    def backward(self, input_values: np.ndarray, error_gradients: NetworkBuffer, values: list, learning_rate: float, batch: bool | int=False):
+        input_values, batch_size = format_with_batching(self._cl, input_values, batch)
 
         outputs, unactivated_outputs, unreduced_outputs = values
 
@@ -186,8 +162,8 @@ class FullyConnected(DefaultLayer):
 
         self.log.debug("Training backwards -> Summing Errors")
 
-        if batch:
-            raw = layer_errors_unreduced.get_as_array().reshape(-1, self.__output_size * self.__input_size)
+        if batch is not False:  # todo - might be faster to do this on the GPU if using batching...
+            raw = layer_errors_unreduced.get_and_release().reshape(-1, self.__output_size * self.__input_size)
 
             # Vectorized: reshape all at once to (num_chunks, output_size, input_size)
             pre_summed = raw.reshape(-1, self.__output_size, self.__input_size)
@@ -206,11 +182,15 @@ class FullyConnected(DefaultLayer):
 
         else:
             # Using CPU cos doing this on the GPU is a PAIN with float32 (or anything but ints)
-            pre_summed = layer_errors_unreduced.get_as_array().reshape((self.__output_size, self.__input_size))
+            pre_summed = layer_errors_unreduced.get_and_release().reshape((self.__output_size, self.__input_size))
             summed = pre_summed.sum(axis=0).astype(np.float32) # Sum along output dimension -> result shape: (input_size, )
             layer_errors_reduced = buffer.NetworkBuffer(self._cl, summed, (self.__input_size,))
 
-            return layer_errors_reduced, weight_gradients, bias_gradients
+            return (
+                layer_errors_reduced,
+                weight_gradients.get_and_release(),
+                bias_gradients.get_and_release()
+            )
 
     def save(self, file, compress):
         file_api.encode_dict({

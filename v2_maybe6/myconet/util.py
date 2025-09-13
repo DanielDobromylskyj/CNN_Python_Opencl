@@ -2,6 +2,19 @@ from .buffer import EmptyNetworkBuffer, NetworkBuffer
 import numpy as np
 
 
+def format_with_batching(cl, inputs, batch) -> tuple[list | np.ndarray | NetworkBuffer, int]:
+    if batch is not False:
+        if type(inputs) in (list, tuple):
+            return concatenate_batch_to_buffer(cl, inputs), len(inputs)
+
+        elif batch:
+            return inputs, len(inputs)
+
+        else:
+            return inputs, int(batch)
+
+    return inputs, 1
+
 def fill_empty_buffer_with_value(buffer: EmptyNetworkBuffer, value: float):
     size = np.prod(buffer.get_shape())
     array = np.full(size, value, dtype=buffer.get_dtype())

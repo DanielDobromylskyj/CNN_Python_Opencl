@@ -104,6 +104,9 @@ class EmptyNetworkBuffer:
     def __truediv__(self, other):
         return NetworkBuffer(self.cl, self.get_as_array() / other, self.__shape)
 
+    def __len__(self):
+        return self.get_shape()[0]
+
 
 
 class NetworkBuffer(EmptyNetworkBuffer):

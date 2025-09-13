@@ -9,7 +9,7 @@ from .core.load import load_kernel, load_training_kernel
 from . import file_api, buffer
 from .layer import loader
 from .logger import Logger
-from .util import concatenate_batch_to_buffer
+from .util import concatenate_batch_to_buffer, format_with_batching
 
 from .optimisers import standard
 
@@ -155,14 +155,8 @@ class Network:
 
         return averaged
 
-    def backward(self, inputs: np.ndarray, target: np.ndarray, learning_rate: float, batch=False):
-        batch_size = 1
-
-        if batch:
-            if type(inputs) in (list, tuple):
-                batch_size = len(inputs)
-            else:
-                batch_size = int(batch)
+    def backward(self, inputs: np.ndarray, target: np.ndarray, learning_rate: float, batch: bool | int=False):
+        x, batch_size = format_with_batching(self.cl, inputs, batch)
 
         inputs = buffer.create_network_buffer_from_input(self.cl, inputs)
 
@@ -172,7 +166,10 @@ class Network:
 
         error_gradient = buffer.NetworkBuffer(self.cl, layer_error.astype(np.float32), layer_error.shape)
 
-        backprop_gradients = []
+        if batch:
+            backprop_gradients = [[] for _ in range(batch_size)]
+        else:
+            backprop_gradients = []
 
         for i in range(len(self.layout)):
             layer_index = len(self.layout) - i - 1
@@ -183,14 +180,23 @@ class Network:
                 error_gradient,
                 backprop_data[layer_index],
                 learning_rate,
-                batch=batch_size
+                batch=batch
             )
 
             error_gradient = next_error_gradient
-            backprop_gradients.append([
-                weight_gradients,
-                bias_gradients
-            ])
+
+            if batch is not False:
+                for j in range(batch_size):
+                    backprop_gradients[j].append([  # This seems off to me. (It was)
+                        np.array(weight_gradients[j]),
+                        np.array(bias_gradients[j])
+                    ])
+
+            else:
+                backprop_gradients.append([
+                    weight_gradients,
+                    bias_gradients
+                ])
 
         return backprop_gradients
 
@@ -210,16 +216,15 @@ class Network:
     def validate(self, validation_data):
         return sum([self.score(sample, sample.output) for sample in validation_data]) / len(validation_data)
 
-    def train(self, training_data, validation_data, epoches, learning_rate, log_progress=False):
+    def train(self, training_data, validation_data, epoches, learning_rate, batch: bool | int =False, log_progress=False):
         self.__ready_kernels(load_training_kernels=True)
 
         last_error = self.validate(validation_data)
 
         for epoch in range(epoches):
-
             gradients = enqueue_many(
                 self.backward,
-                [(sample, sample.output, learning_rate) for sample in training_data],
+                [(sample, sample.output, learning_rate, batch) for sample in training_data],
                 f"Epoch {epoch+1} | Error: {last_error} | Calculating Gradients"
             )
 

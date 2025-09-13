@@ -68,26 +68,26 @@ __kernel void forward(__global float* inputs,
 }
 
 __kernel void backwards(
-            __global float* inputs,
-            __global float* outputs,
-            __global float* unactivated_outputs,
-            __global float* weights,
+            __global float* inputs, // Input
+            __global float* outputs, // Input
+            __global float* unactivated_outputs, // Input
+            __global float* weights, // Input
 
-            __global float* output_error_gradients,
+            __global float* output_error_gradients, // Input
 
-            __global float* input_error_gradients_unreduced,
-            __global float* weight_gradients_unreduced,
-            __global float* bias_gradients,
+            __global float* input_error_gradients_unreduced, // Output
+            __global float* weight_gradients_unreduced, // Output
+            __global float* bias_gradients, // Output
 
-            int input_width,
-            int input_height,
-            int kernel_width,
-            int kernel_height,
-            int output_width,
-            int stride,
-            int channels,
-            int activation_type,
-            float learning_rate
+            int input_width, // Static / Input
+            int input_height, // Static / Input
+            int kernel_width, // Static / Input
+            int kernel_height, // Static / Input
+            int output_width, // Static / Input
+            int stride, // Static / Input
+            int channels, // Static / Input
+            int activation_type, // Static / Input
+            float learning_rate // Static / Input
 ) {
     int output_x = get_global_id(0);
     int output_y = get_global_id(1);

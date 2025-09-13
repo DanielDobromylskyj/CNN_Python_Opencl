@@ -162,14 +162,13 @@ class Convoluted(DefaultLayer):
 
         bias_gradients = create_empty_buffer(self._cl, self.__output_shape[1] * self.__output_shape[2] * batch_size)
 
-
-
         event = self.execute_training_kernel("backwards",
                                      (self.__output_shape[1], self.__output_shape[2], batch_size),
                                      NetworkBuffer(self._cl, input_values, input_values.shape).get_as_buffer(),
                                      outputs.get_as_buffer(),
                                      unactivated_outputs.get_as_buffer(),
                                      self.weights.get_as_buffer(),
+
 
                                      error_gradients.get_as_buffer(),
 

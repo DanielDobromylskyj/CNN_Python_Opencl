@@ -79,8 +79,8 @@ __kernel void backwards(
     int left_hand_batch_offset = batch_index * left_hand_nodes_size;
     int weight_batch_offset = right_hand_nodes_size * left_hand_nodes_size * batch_index;
 
-    float activated_value = right_hand_nodes_activated[right_hand_index + right_hand_batch_offset];  // todo - check this line for index problems. -> Could be a deeper issue (It is)
-    float unactivated_value = right_hand_nodes_unactivated[right_hand_index + right_hand_batch_offset];
+    float activated_value = right_hand_nodes_activated[right_hand_index + right_hand_batch_offset];  // todo - check this line for index problems. -> Could be a deeper issue (It still is)
+    float unactivated_value = right_hand_nodes_unactivated[right_hand_index + right_hand_batch_offset]; // Just not used? bruh
 
     float derivative = 1.0f;
     switch (activation_type) {
@@ -88,8 +88,8 @@ __kernel void backwards(
             derivative = activated_value > 0 ? 1.0f : 0.0f;
             break;
         case 2: // Sigmoid activation
-          derivative = activated_value * (1.0f - activated_value);
-           break;
+            derivative = activated_value * (1.0f - activated_value);
+            break;
         default:
             derivative = 1.0f; // Linear activation (default)
             break;

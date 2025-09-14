@@ -21,14 +21,15 @@ def fill_empty_buffer_with_value(buffer: EmptyNetworkBuffer, value: float):
     buffer.write_to_buffer(array)
 
 def concatenate_batch_to_buffer(cl, arrays):
-    """ Warning: All arrays must be same size! """
+    """ Warning: All arrays must be the same size! """
     big_array = np.stack(arrays)  # if shape is consistent
 
     return NetworkBuffer(cl, big_array, big_array.shape)
 
 
 class WeightInitCollection:
-    def _get_shapes(self, input_shape, output_shape):
+    @staticmethod
+    def _get_shapes(input_shape, output_shape):
         if isinstance(input_shape, int):
             input_shape = [input_shape]
         if isinstance(output_shape, int):
@@ -50,7 +51,8 @@ class WeightInitCollection:
 
 
 class BiasInitCollection:
-    def _get_shape(self, output_shape):
+    @staticmethod
+    def _get_shape(output_shape):
         if isinstance(output_shape, int):
             return (output_shape,)
         elif isinstance(output_shape, (list, tuple)):

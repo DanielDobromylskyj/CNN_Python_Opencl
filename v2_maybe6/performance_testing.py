@@ -31,9 +31,13 @@ print("Created training Data")
     FullyConnected(2304, 1, 2),  # Sigmoid
 ), log_level=1)"""
 
-net = Network((
+net_dense = Network((
     FullyConnected(30_000, 10, 2),  # Sigmoid
-), log_level=3)
+), log_level=1)
+
+net_convoluted = Network((
+    Convoluted((100, 100, 3), (5, 5), 2, 2),  # Sigmoid
+), log_level=1)
 
 
 # Forward Test -> Standard Execution
@@ -42,7 +46,7 @@ standard_start = time.time()
 
 
 outputs1 = [
-    net.forward(item, batch=False) for item in test_data
+    net_dense.forward(item, batch=False) for item in test_data
 ]
 
 standard_end = time.time()
@@ -53,19 +57,19 @@ print("Completed Forward Standard Tests")
 
 batched_start = time.time()
 
-outputs2 = net.forward(test_data, batch=True)
+outputs2 = net_dense.forward(test_data, batch=True)
 
 batched_end = time.time()
 
 print("Completed Forward Batched Tests")
 
 # Training Test -> Standard Execution
-net.force_load_all_kernels()  # Force load kernels as we are not going though normal .train() method
+net_dense.force_load_all_kernels()  # Force load kernels as we are not going though normal .train() method
 
 training_standard_start = time.time()
 
 training_outputs_standard = [
-    net.backward(inputs, outputs, 0.01)
+    net_dense.backward(inputs, outputs, 0.01)
     for inputs, outputs in training_data
 ]
 
@@ -78,7 +82,7 @@ print("Completed Backward Standard Tests")
 training_batch_start = time.time()
 
 inputs, outputs = zip(*training_data)
-training_outputs_batched = net.backward(inputs, outputs, 0.01, batch=True)
+training_outputs_batched = net_dense.backward(inputs, outputs, 0.01, batch=True)
 
 training_batch_end = time.time()
 
@@ -142,22 +146,22 @@ print("Forward Output Match ->", output_match)
 print("Backward Output Match ->", output_match_2, f"-> {err} error" if err else "")
 
 if err:
-    print(training_outputs_standard[1])
-    print(training_outputs_batched[1])
+    print(training_outputs_standard[4])
+    print(training_outputs_batched[4])
 
 print("\n")
 data = [
-    ["Standard", "Forward", "Iterative", round(forward_standard_elapsed, 3), round(forward_standard_elapsed / len(test_data) * 1000, 2), round(forward_standard_elapsed / len(test_data) * 10_000, 1)],
-    ["Batched", "Forward", "Grouped", round(forward_batched_elapsed, 3), round(forward_batched_elapsed / len(test_data) * 1000, 2), round(forward_batched_elapsed / len(test_data) * 10_000, 1)],
+    ["Standard", "Dense", "Forward", "Iterative", round(forward_standard_elapsed, 3), round(forward_standard_elapsed / len(test_data) * 1000, 2), round(forward_standard_elapsed / len(test_data) * 10_000, 1)],
+    ["Batched", "Dense", "Forward", "Grouped", round(forward_batched_elapsed, 3), round(forward_batched_elapsed / len(test_data) * 1000, 2), round(forward_batched_elapsed / len(test_data) * 10_000, 1)],
 
-    ["Standard", "Backward", "Iterative", round(backward_standard_elapsed, 3), round(backward_standard_elapsed / len(test_data) * 1000, 2), round(backward_standard_elapsed / len(test_data) * 10_000, 1)],
-    ["Batched", "Backward", "Grouped", round(backward_batch_elapsed, 3), round(backward_batch_elapsed / len(test_data) * 1000, 2), round(backward_batch_elapsed / len(test_data) * 10_000, 1)],
+    ["Standard", "Dense", "Backward", "Iterative", round(backward_standard_elapsed, 3), round(backward_standard_elapsed / len(test_data) * 1000, 2), round(backward_standard_elapsed / len(test_data) * 10_000, 1)],
+    ["Batched", "Dense", "Backward", "Grouped", round(backward_batch_elapsed, 3), round(backward_batch_elapsed / len(test_data) * 1000, 2), round(backward_batch_elapsed / len(test_data) * 10_000, 1)],
 ]
 
-headers = ["Name", "Direction", "Type", "Total Time (s)", "Time Per Item (ms)", "Time Per Epoch (10k Training) (s)"]
+headers = ["Name", "Layer Type", "Direction", "Type", "Total Time (s)", "Time Per Item (ms)", "Time Per Epoch (10k Training) (s)"]
 
-net.log.disable()
+net_dense.log.disable()
 print(tabulate(data, headers=headers, tablefmt="grid"))
-net.log.enable()
+net_dense.log.enable()
 
 

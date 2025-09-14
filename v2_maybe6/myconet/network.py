@@ -1,8 +1,6 @@
 import pyopencl as cl
 import numpy as np
 import time
-import os
-
 
 from .job_manager import enqueue_many
 from .core.load import load_kernel, load_training_kernel
@@ -187,7 +185,7 @@ class Network:
 
             if batch is not False:
                 for j in range(batch_size):
-                    backprop_gradients[j].append([  # This seems off to me. (It was)
+                    backprop_gradients[j].append([
                         np.array(weight_gradients[j]),
                         np.array(bias_gradients[j])
                     ])
@@ -216,7 +214,7 @@ class Network:
     def validate(self, validation_data):
         return sum([self.score(sample, sample.output) for sample in validation_data]) / len(validation_data)
 
-    def train(self, training_data, validation_data, epoches, learning_rate, batch: bool | int =False, log_progress=False):
+    def train(self, training_data, validation_data, epoches, learning_rate, batch: bool | int =False):
         self.__ready_kernels(load_training_kernels=True)
 
         last_error = self.validate(validation_data)
@@ -245,7 +243,8 @@ class Network:
 
         return layer_types
 
-    def __get_optimiser_id(self):  # todo
+    @staticmethod
+    def __get_optimiser_id():  # todo
         return 0
 
     def __create_header(self, f):

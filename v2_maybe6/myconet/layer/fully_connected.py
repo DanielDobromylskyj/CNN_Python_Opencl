@@ -4,7 +4,7 @@ from .default import DefaultLayer
 from .. import file_api
 from .. import buffer
 from ..buffer import NetworkBuffer
-from ..util import concatenate_batch_to_buffer, weight_init, bias_init, format_with_batching
+from ..util import weight_init, bias_init, format_with_batching
 
 
 class FullyConnected(DefaultLayer):
@@ -45,7 +45,7 @@ class FullyConnected(DefaultLayer):
         return self.__input_size, self.__output_size
 
 
-    def get_approximate_gpu_usage(self, data: np.ndarray | list, batch=False):
+    def get_approximate_gpu_usage(self, data: list | np.ndarray, batch=False):
         single_output_usage = self.__output_size + self.__output_size * self.__input_size
         bytes_per_item = np.float32().nbytes
 
@@ -88,9 +88,9 @@ class FullyConnected(DefaultLayer):
     def forward_train(self, inputs: NetworkBuffer | list, batch=False):
         inputs, batch_size = format_with_batching(self._cl, inputs, batch)
 
-        outputs = buffer.create_empty_buffer(self._cl, self.__output_size * batch_size)
-        unactivated_outputs = buffer.create_empty_buffer(self._cl, self.__output_size * batch_size)
-        unreduced_outputs = buffer.create_empty_buffer(self._cl, self.__output_size * self.__input_size * batch_size)
+        outputs = buffer.create_empty_buffer(self._cl, (batch_size, self.__output_size))
+        unactivated_outputs = buffer.create_empty_buffer(self._cl, (batch_size, self.__output_size))
+        unreduced_outputs = buffer.create_empty_buffer(self._cl, (batch_size, self.__output_size * self.__input_size))
 
         event = self.execute_forward_kernel("forward",
                                     (self.__input_size, self.__output_size, batch_size),
@@ -118,7 +118,7 @@ class FullyConnected(DefaultLayer):
     def backward(self, input_values: np.ndarray, error_gradients: NetworkBuffer, values: list, learning_rate: float, batch: bool | int=False):
         input_values, batch_size = format_with_batching(self._cl, input_values, batch)
 
-        outputs, unactivated_outputs, unreduced_outputs = values
+        outputs, unactivated_outputs, unreduced_outputs = values  # Gathered in a forward phase, all numpy
 
         layer_errors_unreduced = buffer.create_empty_buffer(self._cl, self.__input_size * self.__output_size * batch_size)
 
@@ -137,7 +137,7 @@ class FullyConnected(DefaultLayer):
         self.log.true_debug(f"Output Size: {self.__output_size}, Input Size: {self.__input_size}")
         self.log.true_debug(f"Activation: {self.__activation}, Learning Rate: {learning_rate}")
 
-        self.log.true_debug(f"Kernel Shape: {(self.__input_size, self.__output_size)}")
+        self.log.true_debug(f"Kernel Shape: {(self.__input_size, self.__output_size, batch_size)}")
 
         self.log.debug("Training backwards -> Backwards Kernel")
         self.execute_training_kernel(
@@ -157,12 +157,12 @@ class FullyConnected(DefaultLayer):
             np.int32(self.__input_size),
             np.int32(self.__activation),
             np.float32(learning_rate),
-            np.int32(batch_size),
+            np.int32(batch_size)
         ).wait()
 
         self.log.debug("Training backwards -> Summing Errors")
 
-        if batch is not False:  # todo - might be faster to do this on the GPU if using batching...
+        if batch is not False:  # todo - might (will) be faster to do this on the GPU if using batching...
             raw = layer_errors_unreduced.get_and_release().reshape(-1, self.__output_size * self.__input_size)
 
             # Vectorized: reshape all at once to (num_chunks, output_size, input_size)

@@ -57,11 +57,10 @@ __kernel void reduce_outputs_forward(__global float* unreduced_outputs,
 }
 
 
-// REMEMBER THAT WE ARE WORKING BACKWARDS. SO OUR "inputs" ARE THE RIGHT SIDE NODES OF A LAYER
 __kernel void backwards(
         __global float* left_hand_nodes,
         __global float* right_hand_nodes_activated,
-        __global float* right_hand_nodes_unactivated,
+        __global float* right_hand_nodes_unactivated, // not used
         __global float* weights,
         __global float* right_hand_nodes_error_gradients,
         __global float* left_hand_nodes_error_gradients_unreduced, // Same size as the weights, so we can "reduce" it later for our final output
@@ -69,7 +68,7 @@ __kernel void backwards(
         __global float* bias_gradients,
         int right_hand_nodes_size, int left_hand_nodes_size, int activation_type,
         float learning_rate,
-        int batch_count
+        int batch_count // Not used?
 ) {
     int left_hand_index = get_global_id(0);
     int right_hand_index = get_global_id(1);
@@ -80,7 +79,6 @@ __kernel void backwards(
     int weight_batch_offset = right_hand_nodes_size * left_hand_nodes_size * batch_index;
 
     float activated_value = right_hand_nodes_activated[right_hand_index + right_hand_batch_offset];  // todo - check this line for index problems. -> Could be a deeper issue (It still is)
-    float unactivated_value = right_hand_nodes_unactivated[right_hand_index + right_hand_batch_offset]; // Just not used? bruh
 
     float derivative = 1.0f;
     switch (activation_type) {

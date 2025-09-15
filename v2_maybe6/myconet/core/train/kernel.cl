@@ -84,6 +84,7 @@ __kernel void backwards(
             int kernel_width, // Static / Input
             int kernel_height, // Static / Input
             int output_width, // Static / Input
+            int output_height,
             int stride, // Static / Input
             int channels, // Static / Input
             int activation_type, // Static / Input
@@ -91,11 +92,19 @@ __kernel void backwards(
 ) {
     int output_x = get_global_id(0);
     int output_y = get_global_id(1);
+    int batch_index = get_global_id(2);
 
-    int output_index = output_y * output_width + output_x;
+    int kernel_weight_count = kernel_width * kernel_height * channels;
+    int output_count = output_width * output_height;
 
-    float activated_value = outputs[output_index];
-    float unactivated_value = unactivated_outputs[output_index];
+    int output_batch_offset = output_count * batch_index;
+    int input_batch_offset = input_width * input_height * channels * batch_index;
+    int unreduced_buffer_offset = kernel_weight_count * output_count * batch_index;
+
+    int relative_output_index = output_y * output_width + output_x;
+    int output_index = relative_output_index + output_batch_offset;
+
+    float activated_value = outputs[0];
 
     float derivative = 1.0f;
     switch (activation_type) {
@@ -103,14 +112,14 @@ __kernel void backwards(
             derivative = activated_value > 0 ? 1.0f : 0.0f;
             break;
         case 2: // Sigmoid activation
-          derivative = activated_value * (1.0f - activated_value);
-           break;
+            derivative = activated_value * (1.0f - activated_value);
+            break;
         default:
             derivative = 1.0f; // Linear activation (default)
             break;
     }
 
-    float delta = output_error_gradients[output_index] * derivative;
+    float delta = output_error_gradients[output_index]; // * derivative
     bias_gradients[output_index] = delta * learning_rate;
 
     int input_x_anchor = output_x * stride;
@@ -122,17 +131,17 @@ __kernel void backwards(
 
         for (int dx=0; dx<kernel_width; dx++) {
             for (int dy=0; dy<kernel_height; dy++) {
-                int weight_index = base_weight_index + (dy * kernel_width) + dx;
+                int weight_index = base_weight_index + (dy * kernel_width) + dx; // No need to add batching logic, ony 1 set of weights/biases
                 int input_index = base_input_index + ((input_y_anchor + dy) * input_height) + (input_x_anchor + dx);
 
-                float weight_gradient = delta * inputs[input_index] * learning_rate;
+                float weight_gradient = delta * inputs[input_index + input_batch_offset] * learning_rate;
                 float input_error_gradient = clip(weights[weight_index] * delta, 1.0f);  // Dont *learning rate, as this makes the gradients disappear faster (Bad)
 
                 // Here comes the silly (and probably wrong) indexing
                 int max_output_weight_size = kernel_width * kernel_height * channels;
-                int unreduced_index = (max_output_weight_size * output_index) + weight_index;  // Its the same for weights & input gradients
+                int unreduced_index = (max_output_weight_size * relative_output_index) + weight_index + unreduced_buffer_offset;  // Its the same for weights & input gradients
 
-                weight_gradients_unreduced[unreduced_index] = weight_gradient;
+                weight_gradients_unreduced[unreduced_index] = (float)(dx);
                 input_error_gradients_unreduced[unreduced_index] = input_error_gradient;
             }
         }

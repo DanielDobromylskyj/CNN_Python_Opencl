@@ -1,7 +1,7 @@
 from .default import DefaultLayer
 from ..buffer import NetworkBuffer, create_empty_buffer
 from ..file_api import encode_dict, decode_dict
-from ..util import concatenate_batch_to_buffer, weight_init, bias_init, fill_empty_buffer_with_value
+from ..util import concatenate_batch_to_buffer, weight_init, bias_init, format_with_batching
 
 import numpy as np
 
@@ -73,15 +73,7 @@ class Convoluted(DefaultLayer):
         )
 
     def forward(self, inputs: NetworkBuffer | list, wait=True, batch=False):
-        batch_size = 1
-
-        if batch:
-            if type(inputs) in (list, tuple):
-                batch_size = len(inputs)
-                inputs = concatenate_batch_to_buffer(self._cl, inputs)
-
-            else:
-                batch_size = int(batch)
+        inputs, batch_size = format_with_batching(self._cl, inputs, batch)
 
         outputs = create_empty_buffer(self._cl, self.__output_shape[1] * self.__output_shape[2] * batch_size)
 
@@ -105,13 +97,7 @@ class Convoluted(DefaultLayer):
         return outputs
 
     def forward_train(self, inputs: NetworkBuffer, batch=False):  # todo
-        batch_size = 1
-
-        if batch:
-            batch_size = len(inputs)
-
-            if type(inputs) in (list, tuple):
-                inputs = concatenate_batch_to_buffer(self._cl, inputs)
+        inputs, batch_size = format_with_batching(self._cl, inputs, batch)
 
 
         outputs = create_empty_buffer(self._cl, self.__output_shape[1] * self.__output_shape[2])
@@ -138,29 +124,23 @@ class Convoluted(DefaultLayer):
         return outputs, unactivated_outputs
 
     def backward(self, input_values: np.ndarray, error_gradients: NetworkBuffer, values: list, learning_rate: float, batch=False):
-        batch_size = 1
-
-        if batch:
-            batch_size = len(input_values)
-
-            if type(input_values) in (list, tuple):
-                input_values = concatenate_batch_to_buffer(self._cl, input_values)
+        input_values, batch_size = format_with_batching(self._cl, input_values, batch)
 
         outputs, unactivated_outputs = values
 
         # This is a LOT of data...
         input_error_gradients_unreduced = create_empty_buffer(self._cl,
-                                        self.__output_shape[0] * self.__output_shape[1] * self.__output_shape[2] *
-                                        self.__kernel_shape[0] * self.__kernel_shape[1] * batch_size)
+                                        (batch_size, self.__output_shape[0] * self.__output_shape[1] * self.__output_shape[2] *
+                                        self.__kernel_shape[0] * self.__kernel_shape[1]))
 
         weight_error_gradients_unreduced = create_empty_buffer(self._cl,
-                                                              self.__output_shape[0] * self.__output_shape[1] *
+                                                              (batch_size, self.__output_shape[0] * self.__output_shape[1] *
                                                               self.__output_shape[2] *
-                                                              self.__kernel_shape[0] * self.__kernel_shape[1] * batch_size)
+                                                              self.__kernel_shape[0] * self.__kernel_shape[1]))
 
-        weight_gradients = create_empty_buffer(self._cl, self.weights.get_shape() * batch_size)
+        weight_gradients = create_empty_buffer(self._cl, (batch_size, *self.weights.get_shape()))
 
-        bias_gradients = create_empty_buffer(self._cl, self.__output_shape[1] * self.__output_shape[2] * batch_size)
+        bias_gradients = create_empty_buffer(self._cl, (batch_size, self.__output_shape[1] * self.__output_shape[2]))
 
         event = self.execute_training_kernel("backwards",
                                      (self.__output_shape[1], self.__output_shape[2], batch_size),
@@ -178,11 +158,16 @@ class Convoluted(DefaultLayer):
 
                                      np.int32(self.__input_shape[0]),
                                      np.int32(self.__input_shape[1]),
+
                                      np.int32(self.__kernel_shape[0]),
                                      np.int32(self.__kernel_shape[1]),
+
                                      np.int32(self.__output_shape[1]),  # Output shape[0] is the channel count need width
+                                     np.int32(self.__output_shape[2]),
+
                                      np.int32(self.__stride),
                                      np.int32(self.__input_shape[2]),
+
                                      np.int32(self.__activation),
                                      np.float32(learning_rate),
         )
@@ -199,7 +184,11 @@ class Convoluted(DefaultLayer):
                                      wait_for=event
         ).wait()
 
-        return None, weight_gradients.get_and_release(), bias_gradients.get_and_release()
+
+        if batch_size == 1:
+            return None, weight_gradients.get_and_release()[0], bias_gradients.get_and_release()[0]
+        else:
+            return None, weight_gradients.get_and_release(), bias_gradients.get_and_release()
 
     def get_node_count(self):
         return self.__input_shape[0] * self.__input_shape[1] * self.__input_shape[2], self.__output_shape[1] * self.__output_shape[2]

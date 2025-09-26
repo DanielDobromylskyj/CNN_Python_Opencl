@@ -6,11 +6,20 @@
 - [Save File Format](#file-formats)
 
 
+## 🚧 Roadmap
+- [x] Basic network support
+- [x] File API v1.2
+- [ ] Multi-kernel convolution
+- [ ] More activation functions
+- [ ] Batch Support (Global)
+- [x] Batch Support (Forward)
+- [ ] Batch Support (Backward)
+
 ## Module
 
 ### Overview
 
-MycoNet is a neural networking tool with intergrated GPU acceleration using OpenCL 2.0, Allowing it to run quickly on many devices, including AMD and NVIDEA cards!
+MycoNet is a neural networking tool with integrated GPU acceleration using OpenCL 2.0, Allowing it to run quickly on many devices, including AMD and NVIDIA cards!
 MycoNet is a tool produced to train and process neural networks for my Find-A-Bac project, Where I aim to help detect mycobacterium in animal tissue using AI.
 
 > **Disclaimer:** As of 14/06/25 | Only tested on a AMD 7600 XT & Radeon 610M (Not that the 610M was very happy)
@@ -204,7 +213,6 @@ Single Sample Data (In Order):
 - Output Data: Serialized numpy.ndarray (default: float32, shape depends on task).
 - Compression: Entire file is transparently compressed using lz4.frame.
 - Termination: End of file is reached when no further length prefix can be read.
-
 
 
 ## 📝 License

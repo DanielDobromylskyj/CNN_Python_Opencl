@@ -1,4 +1,4 @@
-# 🦠 MycoNet  (v2_maybe6)
+# 🦠 MycoNet
 > **Disclaimer:** This project is still in development and may break or behave unexpectedly. Use at your own risk!
 
 ## Index

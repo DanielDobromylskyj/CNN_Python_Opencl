@@ -78,11 +78,6 @@ Pip requirements:
 
 > **Warning:** This list may not be exhaustive, as project is still in development
 
-## About Me
-
-This project is maintained by [Daniel Dobromylskyj](https://github.com/DanielDobromylskyj). You can reach me at daniel.dobromylskyj@outlook.com.
-
-
 ## File Formats
 
 ### Network Files (.pyn) (v1.2)
@@ -213,6 +208,11 @@ Single Sample Data (In Order):
 - Output Data: Serialized numpy.ndarray (default: float32, shape depends on task).
 - Compression: Entire file is transparently compressed using lz4.frame.
 - Termination: End of file is reached when no further length prefix can be read.
+
+
+## About Me
+
+This project is maintained by [Daniel Dobromylskyj](https://github.com/DanielDobromylskyj). You can reach me at daniel.dobromylskyj@outlook.com.
 
 
 ## 📝 License

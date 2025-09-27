@@ -4,3 +4,4 @@ dump
 *.bin
 *.tiff
 /v2_maybe6/logs
+/logs

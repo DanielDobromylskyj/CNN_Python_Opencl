@@ -243,8 +243,8 @@ print("Forward (Convoluted) Output Match ->", conv_output_match)
 print("Backward (Convoluted) Output Match ->", conv_output_match_2, f"-> {err2} error" if err2 else "")
 
 if err2:
-    print(training_conv_outputs_standard[1])
-    print(training_conv_outputs_batched[1])
+    print(training_conv_outputs_standard[2])
+    print(training_conv_outputs_batched[2])
 
 
 print("\n")

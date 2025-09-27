@@ -72,7 +72,7 @@ class Convoluted(DefaultLayer):
             (self.__output_shape[1] * self.__output_shape[2],)
         )
 
-    def forward(self, inputs: NetworkBuffer | list, wait=True, batch=False):
+    def forward(self, inputs: NetworkBuffer | list, wait=True, batch=False) -> NetworkBuffer:
         inputs, batch_size = format_with_batching(self._cl, inputs, batch)
 
         outputs = create_empty_buffer(self._cl, self.__output_shape[1] * self.__output_shape[2] * batch_size)
@@ -96,20 +96,21 @@ class Convoluted(DefaultLayer):
 
         return outputs
 
-    def forward_train(self, inputs: NetworkBuffer, batch=False):  # todo
+    def forward_train(self, inputs: NetworkBuffer, batch=False):
         inputs, batch_size = format_with_batching(self._cl, inputs, batch)
 
-
-        outputs = create_empty_buffer(self._cl, self.__output_shape[1] * self.__output_shape[2])
-        unactivated_outputs = create_empty_buffer(self._cl, self.__output_shape[1] * self.__output_shape[2])
+        outputs = create_empty_buffer(self._cl, (batch_size, self.__output_shape[1] * self.__output_shape[2]))
+        unactivated_outputs = create_empty_buffer(self._cl, (batch_size, self.__output_shape[1] * self.__output_shape[2]))
 
         self.execute_training_kernel("forward",
                                     (self.__output_shape[1], self.__output_shape[2], batch_size),
                                     inputs.get_as_buffer(),
                                      outputs.get_as_buffer(),
                                      unactivated_outputs.get_as_buffer(),
+
                                      self.weights.get_as_buffer(),
                                      self.bias.get_as_buffer(),
+
                                      np.int32(self.__input_shape[0]),
                                      np.int32(self.__input_shape[1]),
                                      np.int32(self.__kernel_shape[0]),
@@ -146,7 +147,6 @@ class Convoluted(DefaultLayer):
                                      (self.__output_shape[1], self.__output_shape[2], batch_size),
                                      NetworkBuffer(self._cl, input_values, input_values.shape).get_as_buffer(),
                                      outputs.get_as_buffer(),
-                                     unactivated_outputs.get_as_buffer(),
                                      self.weights.get_as_buffer(),
 
 

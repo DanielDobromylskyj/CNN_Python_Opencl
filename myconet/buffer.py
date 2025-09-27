@@ -63,6 +63,9 @@ class EmptyNetworkBuffer:
     def write_to_buffer(self, array, offset=0):
         pycl.enqueue_copy(self.cl.queue, self.buffer, array, device_offset=offset * np.dtype(self.__dtype).itemsize)
 
+    def force_shape(self, shape):
+        self.__shape = shape
+
     def get_dtype(self):
         return self.__dtype
 

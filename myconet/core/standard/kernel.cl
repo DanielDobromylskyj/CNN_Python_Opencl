@@ -32,8 +32,6 @@ __kernel void forward(__global float* inputs,
     int input_x_anchor = output_x * stride;
     int input_y_anchor = output_y * stride;
 
-    // fixme - Batch indexing is fucked, At least the weight index is fine (I didn't touch that bit)
-
     float total_sum = biases[output_index];
     for (int channel=0; channel < channels; channel++) {
         int base_weight_index = kernel_width * kernel_height * channel;

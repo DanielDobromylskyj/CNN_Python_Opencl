@@ -30,6 +30,9 @@ __kernel void forward(__global float* inputs,
     int output_y = get_global_id(1);
     int batch_index = get_global_id(2);
 
+    int output_batch_offset = output_width * output_height * batch_index;
+    int input_batch_offset = input_width * input_height * channels * batch_index;
+
     int output_index = output_y * output_width + output_x;
     int input_x_anchor = output_x * stride;
     int input_y_anchor = output_y * stride;
@@ -37,20 +40,20 @@ __kernel void forward(__global float* inputs,
     float total_sum = biases[output_index];
     for (int channel=0; channel<channels; channel++) {
         int base_weight_index = kernel_width * kernel_height * channel;
-        int base_input_index = input_width * input_height * channel;
+        int base_input_index = (input_width * input_height * channel);
 
         for (int dx=0; dx<kernel_width; dx++) {
             for (int dy=0; dy<kernel_height; dy++) {
                 int weight_index = base_weight_index + (dy * kernel_width) + dx;
                 int input_index = base_input_index + ((input_y_anchor + dy) * input_height) + (input_x_anchor + dx);
 
-                float weighted_value = weights[weight_index] * inputs[input_index];
-                total_sum = total_sum + weighted_value;
+                float weighted_value = weights[weight_index] * inputs[input_index + input_batch_offset];
+                total_sum += weighted_value;
             }
         }
     }
 
-    float activated = 0.0;
+    float activated = 0.0f;
     switch (activation_type) {
             case 1:  // ReLU
                 activated = relu(total_sum);
@@ -63,14 +66,13 @@ __kernel void forward(__global float* inputs,
                 break;
     }
 
-    unactivated_outputs[output_index] = total_sum;
-    outputs[output_index] = activated;
+    unactivated_outputs[output_index + output_batch_offset] = total_sum;
+    outputs[output_index + output_batch_offset] = activated;
 }
 
 __kernel void backwards(
             __global float* inputs, // Input
             __global float* outputs, // Input
-            __global float* unactivated_outputs, // Input
             __global float* weights, // Input
 
             __global float* output_error_gradients, // Input
@@ -175,7 +177,6 @@ __kernel void reduce_weight_gradients(
                        kernel_x;
 
     float weight_gradient_sum = 0.0f;
-
     for (int output_index = 0; output_index < output_size; output_index++) {
         int unreduced_index = (batch_index * output_size * weights_per_batch) +
                               (output_index * weights_per_batch) +

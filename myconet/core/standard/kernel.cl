@@ -32,7 +32,7 @@ __kernel void forward(__global float* inputs,
     int input_x_anchor = output_x * stride;
     int input_y_anchor = output_y * stride;
 
-    float total_sum = biases[output_index];
+    float total_sum = biases[0]; // Only 1 value for this, 1 bias per filter/kernel
     for (int channel=0; channel < channels; channel++) {
         int base_weight_index = kernel_width * kernel_height * channel;
         int base_input_index = (input_width * input_height * channel) + batch_input_offset;

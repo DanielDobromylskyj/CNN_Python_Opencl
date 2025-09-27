@@ -11,9 +11,9 @@
 - [x] File API v1.2
 - [ ] Multi-kernel convolution
 - [ ] More activation functions
-- [ ] Batch Support (Global)
+- [x] Batch Support (Global)
 - [x] Batch Support (Forward)
-- [ ] Batch Support (Backward)
+- [x] Batch Support (Backward)
 
 ## Module
 

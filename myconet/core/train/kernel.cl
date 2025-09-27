@@ -27,11 +27,15 @@ __kernel void forward(__global float* inputs,
 
                       int stride,
                       int channels,
-                      int activation_type
+                      int activation_type,
+                      int max_batches
 ) {
     int output_x = get_global_id(0);
     int output_y = get_global_id(1);
-    int batch_index = get_global_id(2);
+    int mixed_index = get_global_id(2);
+
+    int batch_index = mixed_index / max_batches;
+    int filter_index = (mixed_index * max_batches) - batch_index;
 
     int output_batch_offset = output_width * output_height * batch_index;
     int input_batch_offset = input_width * input_height * channels * batch_index;

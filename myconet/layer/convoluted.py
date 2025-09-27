@@ -39,12 +39,13 @@ def ensure_stride_is_int(stride):
 
 
 class Convoluted(DefaultLayer):
-    def __init__(self, input_shape: tuple[int, int, int] | tuple[int, int], kernel_shape: tuple[int, int], stride:int, activation:int, is_loading=False):
+    def __init__(self, input_shape: tuple[int, int, int] | tuple[int, int], kernel_shape: tuple[int, int], filter_count: int, stride:int, activation:int, is_loading=False):
         super().__init__()
 
         self.__input_shape = ensure_input_is_3D(input_shape)
         self.__kernel_shape = ensure_kernel_is_2D(kernel_shape)
         self.__stride = ensure_stride_is_int(stride)
+        self.__filter_count = filter_count
 
         self.__output_shape = calculate_output_shape(self.__input_shape, self.__kernel_shape, self.__stride)
         self.__activation = activation
@@ -60,25 +61,34 @@ class Convoluted(DefaultLayer):
         if self.__is_loading:
             return  # do not init
 
+        def duplicate(data, count):
+            return np.tile(data, count)
+
         self.weights = NetworkBuffer(
             self._cl,
-            weight_init(self.__kernel_shape[0] * self.__kernel_shape[1] * self.__input_shape[2], 1, self.__activation),
-            (self.__kernel_shape[0] * self.__kernel_shape[1] * self.__input_shape[2],)
+            duplicate(
+                weight_init(self.__kernel_shape[0] * self.__kernel_shape[1] * self.__input_shape[2], 1, self.__activation),
+                self.__filter_count,
+            ),
+            (self.__kernel_shape[0] * self.__kernel_shape[1] * self.__input_shape[2], self.__filter_count),
         )
 
         self.bias = NetworkBuffer(
             self._cl,
-            bias_init((self.__output_shape[1] * self.__output_shape[2]), 1, self.__activation),
-            (self.__output_shape[1] * self.__output_shape[2],)
+            duplicate(
+                bias_init((self.__output_shape[1] * self.__output_shape[2]), 1, self.__activation),
+                self.__filter_count,
+            ),
+            (self.__output_shape[1] * self.__output_shape[2], self.__filter_count),
         )
 
     def forward(self, inputs: NetworkBuffer | list, wait=True, batch=False) -> NetworkBuffer:
         inputs, batch_size = format_with_batching(self._cl, inputs, batch)
 
-        outputs = create_empty_buffer(self._cl, self.__output_shape[1] * self.__output_shape[2] * batch_size)
+        outputs = create_empty_buffer(self._cl, self.__output_shape[1] * self.__output_shape[2] * batch_size * self.__filter_count)
 
         self.execute_forward_kernel("forward",
-                                    (self.__output_shape[1], self.__output_shape[2], batch_size),
+                                    (self.__output_shape[1], self.__output_shape[2], batch_size * self.__filter_count),
                                     inputs.get_as_buffer(),
                                     outputs.get_as_buffer(),
                                     self.weights.get_as_buffer(),
@@ -92,6 +102,7 @@ class Convoluted(DefaultLayer):
                                     np.int32(self.__stride),
                                     np.int32(self.__input_shape[2]),
                                     np.int32(self.__activation),
+                                    np.int32(batch_size),
                                     ).wait()
 
         return outputs
@@ -99,11 +110,11 @@ class Convoluted(DefaultLayer):
     def forward_train(self, inputs: NetworkBuffer, batch=False):
         inputs, batch_size = format_with_batching(self._cl, inputs, batch)
 
-        outputs = create_empty_buffer(self._cl, (batch_size, self.__output_shape[1] * self.__output_shape[2]))
-        unactivated_outputs = create_empty_buffer(self._cl, (batch_size, self.__output_shape[1] * self.__output_shape[2]))
+        outputs = create_empty_buffer(self._cl, (batch_size * self.__filter_count, self.__output_shape[1] * self.__output_shape[2] * self.__filter_count))
+        unactivated_outputs = create_empty_buffer(self._cl, (batch_size, self.__output_shape[1] * self.__output_shape[2] * self.__filter_count))
 
         self.execute_training_kernel("forward",
-                                    (self.__output_shape[1], self.__output_shape[2], batch_size),
+                                    (self.__output_shape[1], self.__output_shape[2], batch_size * self.__filter_count),
                                     inputs.get_as_buffer(),
                                      outputs.get_as_buffer(),
                                      unactivated_outputs.get_as_buffer(),
@@ -198,6 +209,7 @@ class Convoluted(DefaultLayer):
             "input_shape": self.__input_shape,
             "kernel_shape": self.__kernel_shape,
             "stride": self.__stride,
+            "filter": self.__filter_count,
             "activation": self.__activation,
 
             "weights": self.weights.get_as_array(),
@@ -208,8 +220,7 @@ class Convoluted(DefaultLayer):
     def load(cl, file, compressed):
         data = decode_dict(file, compressed)
 
-
-        layer = Convoluted(data["input_shape"], data["kernel_shape"], data["stride"], data["activation"], is_loading=True)
+        layer = Convoluted(data["input_shape"], data["kernel_shape"], data["filter"], data["stride"], data["activation"], is_loading=True)
 
         layer.weights = NetworkBuffer(cl, data["weights"], data["weights"].shape)
         layer.bias = NetworkBuffer(cl, data["bias"], data["bias"].shape)

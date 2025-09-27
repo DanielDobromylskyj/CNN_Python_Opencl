@@ -39,17 +39,12 @@ conv_training_data = [
 
 print("Created training Data")
 
-"""net = Network((
-    Convoluted((100, 100, 3), (5, 5), 2, 1),  # ReLU
-    FullyConnected(2304, 1, 2),  # Sigmoid
-), log_level=1)"""
-
 net_dense = Network((
     FullyConnected(30_000, 10, 2),  # Sigmoid
 ), log_level=1)
 
 net_convoluted = Network((
-    Convoluted((100, 100, 3), (5, 5), 2, 2),  # Sigmoid
+    Convoluted((100, 100, 3), (5, 5), 1, 2, 2),  # Sigmoid
 ), log_level=1)
 
 net_convoluted.log.disable()
@@ -226,7 +221,7 @@ def compare_nested_lists(a, b):
 output_match_2, err = compare_nested_lists(training_outputs_standard, training_outputs_batched)
 conv_output_match_2, err2 = compare_nested_lists(training_conv_outputs_standard, training_conv_outputs_batched)
 
-print("\n>> PERFORMANCE BREAK DOWN <<")
+print("\n\n>> PERFORMANCE BREAK DOWN <<")
 print("Batch Size ->", len(test_data))
 
 batch_increase_forward = round((forward_standard_elapsed - forward_batched_elapsed) / forward_standard_elapsed * 100, 1)

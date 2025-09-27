@@ -16,7 +16,6 @@ class InvalidNetwork(Exception):
     pass
 
 
-
 class OpenCL_Instance:
     def __init__(self, log=None):
         self.ctx = cl.create_some_context()
